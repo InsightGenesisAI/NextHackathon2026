@@ -6,7 +6,9 @@
   "main": "server/index.js",
   "scripts": {
     "start": "node server/index.js",
-    "dev": "node server/index.js"
+    "dev": "node server/index.js",
+    "build": "echo 'No build step - pure Node.js'",
+    "vercel-build": "echo 'No build step - pure Node.js serverless function'"
   },
   "engines": {
     "node": ">=18"
