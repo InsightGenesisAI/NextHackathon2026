@@ -38,10 +38,36 @@
     <script>
       const MOCK = {
         pending_auth_id: "iauth_preview_mock",
+        exa_query:
+          "standard annual pricing schedules and mid-market volume discounts for GitHub Enterprise seats",
+        telemetry: [
+          { agent: "Company DNA", label: "Loading precollected corporate rules", ms: 8, status: "done" },
+          { agent: "Stripe Hub", label: "Pulling live balances & runway", ms: 142, status: "done" },
+          { agent: "Stripe Hub", label: "Placing manual authorization hold", ms: 96, status: "done" },
+          { agent: "Agent 1: Search Strategist", label: "Compiling Exa query", ms: 120, status: "done" },
+          { agent: "Exa API", label: "Pulling market benchmarks", ms: 180, status: "done" },
+          { agent: "Agent 2: CFO Auditor", label: "Cross-referencing Stripe ledger & DNA", ms: 940, status: "done" },
+        ],
+        tool_use: {
+          exa_query:
+            "standard annual pricing schedules and mid-market volume discounts for GitHub Enterprise seats",
+          exa_mode: "simulated",
+          exa_sources: ["https://github.com/pricing"],
+          stripe_mode: "simulated",
+          pending_auth_id: "iauth_preview_mock",
+        },
         audit: {
           is_flagged: true,
           missing_context_question:
             "Why is this premium enterprise tier required over our unutilized alternative software licenses?",
+          chain_of_thought: [
+            "Step 1: Parsed cart from GitHub Inc. totaling $2,268.00.",
+            "Step 2: Exa benchmark scan shows pricing ~22% above standard B2B volume rates.",
+            "Step 3: Checked Stack Registry — found 3 unused GitHub Enterprise licenses in the same category.",
+            "Step 4: Cross-referenced Stripe ledger — department budget projects to 97% with cash runway ~14 months.",
+            "Step 5: Matched 1 expense policy violation: EP-001.",
+            "Decision: FLAG for human review.",
+          ],
           capsules: {
             market: {
               source: "Exa",

@@ -16,6 +16,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
 
+  if (message.type === "APE_REVIEW") {
+    runReview(message.payload).then(sendResponse).catch((err) => sendResponse({ error: err.message }));
+    return true;
+  }
+
   // Legacy message types
   if (message.type === "APE_AUDIT") {
     runIntercept(message.payload).then(sendResponse).catch((err) => sendResponse({ error: err.message }));
@@ -54,6 +59,22 @@ async function runResolve({ auth_id, action, justification }) {
   if (!response.ok) {
     const detail = await response.text();
     throw new Error(`Resolve failed (${response.status}): ${detail}`);
+  }
+
+  return response.json();
+}
+
+async function runReview({ auth_id, justification }) {
+  const apiBase = await getApiBase();
+  const response = await fetch(`${apiBase}/api/v1/review`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ auth_id, justification: justification || "" }),
+  });
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`Review failed (${response.status}): ${detail}`);
   }
 
   return response.json();

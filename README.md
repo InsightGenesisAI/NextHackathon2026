@@ -33,14 +33,43 @@ Extension popup settings:
 - **Python hub URL** — default `http://127.0.0.1:8787`
 - **Timeout fallback** — `fail-closed` (block) or `fail-open` (soft warning + proceed)
 
+### 3. Package for distribution (deployable .zip)
+
+The extension is plain Manifest V3 with no build step. To produce a shippable zip:
+
+```bash
+python package_extension.py        # → dist/agentcfo-extension-v<version>.zip
+```
+
+Load unpacked from `extension/` for development, or upload the generated zip to the
+Chrome Web Store Developer Dashboard for distribution.
+
 ## API endpoints (v1)
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| `POST` | `/api/v1/intercept` | Full APE pipeline → UI-ready capsules JSON |
+| `POST` | `/api/v1/intercept` | Full APE pipeline → UI-ready capsules + telemetry + chain-of-thought |
+| `POST` | `/api/v1/review` | HITL: re-evaluate a flagged purchase against the human's justification (no money moves) |
 | `POST` | `/api/v1/resolve?action=approve\|decline` | Stripe auth approve / decline |
 
 Legacy: `/api/audit`, `/api/resolve` still supported.
+
+## Hackathon rubric features (the "Glass Brain")
+
+- **Live Telemetry Tracker** — the loading modal animates the multi-agent pipeline
+  (Agent 1 → Exa → Agent 2) and `/api/v1/intercept` returns a `telemetry` array with
+  real per-stage timings (`[Done: 120ms]`).
+- **Chain-of-thought audit logs** — Evaluator 2 emits a `chain_of_thought` array.
+  The hard-wall has a collapsible **Audit Logs · Terminal View** revealing the
+  reasoning steps, the exact Exa query Agent 1 formulated, the Stripe auth-hold id,
+  and the live/simulated mode of each tool (proof of real tool use).
+- **Human-in-the-loop** — submitting a justification first hits `/api/v1/review`, where
+  the CFO Auditor dynamically decides whether the context justifies the override (e.g.
+  *"running a 48-hour load test"* → approved) before any funds are released.
+- **Graceful degradation** — if the Python hub exceeds the 4.5s timeout or drops,
+  `fail-open` mode shows a soft "Bypass" state ("Market Intel Offline · Stripe Ledger
+  Confirms Sufficient Funds · Approving to prevent operational blockage"); `fail-closed`
+  holds the checkout.
 
 ## Extension modules
 

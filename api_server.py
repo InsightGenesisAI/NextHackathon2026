@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field
 
 from spoke_cards import get_company_dna
 from spoke_extension import normalize_extension_payload
-from spoke_intelligence import run_cfo_auditor, run_search_strategist
+from spoke_intelligence import run_cfo_auditor, run_search_strategist, reevaluate_with_justification
 from spoke_market import execute_exa_instant_scan
 from spoke_stripe_tracker import capture_pending_auth, fetch_live_financial_health, resolve_authorization
 
@@ -35,6 +35,10 @@ app.add_middleware(
 
 PROFILE_ID = os.getenv("APE_COMPANY_PROFILE", "standard_b2b_startup")
 _EXTENSION_DIR = Path(__file__).parent / "extension"
+
+# In-memory context cache keyed by pending auth id — enables HITL re-evaluation
+# of a flagged purchase using the human's justification as new context.
+_AUDIT_SESSIONS: dict[str, dict[str, Any]] = {}
 
 
 class InterceptRequest(BaseModel):
@@ -156,36 +160,86 @@ def _build_ui_capsules(
 
 
 def _run_intercept_pipeline(cart_data: dict[str, Any]) -> dict[str, Any]:
-    company_dna = get_company_dna(profile_id=PROFILE_ID)
-    stripe_health = fetch_live_financial_health(card_id=cart_data["used_card_id"])
+    import time
 
-    pending_auth_id = capture_pending_auth(
-        card_id=cart_data["used_card_id"],
-        amount_cents=cart_data["amount_cents"],
-        merchant=cart_data["merchant"],
+    telemetry: list[dict[str, Any]] = []
+
+    def _stage(agent: str, label: str, fn):
+        start = time.perf_counter()
+        result = fn()
+        elapsed_ms = int((time.perf_counter() - start) * 1000)
+        telemetry.append({"agent": agent, "label": label, "ms": elapsed_ms, "status": "done"})
+        return result
+
+    company_dna = _stage(
+        "Company DNA", "Loading precollected corporate rules",
+        lambda: get_company_dna(profile_id=PROFILE_ID),
+    )
+    stripe_health = _stage(
+        "Stripe Hub", "Pulling live balances & runway",
+        lambda: fetch_live_financial_health(card_id=cart_data["used_card_id"]),
+    )
+
+    pending_auth_id = _stage(
+        "Stripe Hub", "Placing manual authorization hold",
+        lambda: capture_pending_auth(
+            card_id=cart_data["used_card_id"],
+            amount_cents=cart_data["amount_cents"],
+            merchant=cart_data["merchant"],
+        ),
     )
     stripe_health["pending_auth_id"] = pending_auth_id
 
-    exa_query = run_search_strategist(raw_cart=cart_data, api_key=os.getenv("OPENAI_API_KEY"))
-    market_benchmarks = execute_exa_instant_scan(query=exa_query, api_key=os.getenv("EXA_API_KEY"))
+    exa_query = _stage(
+        "Agent 1: Search Strategist", "Compiling Exa query",
+        lambda: run_search_strategist(raw_cart=cart_data, api_key=os.getenv("OPENAI_API_KEY")),
+    )
+    market_benchmarks = _stage(
+        "Exa API", "Pulling market benchmarks",
+        lambda: execute_exa_instant_scan(query=exa_query, api_key=os.getenv("EXA_API_KEY")),
+    )
 
-    audit_decision = run_cfo_auditor(
-        cart=cart_data,
-        market_data=market_benchmarks,
-        company_rules=company_dna,
-        financials=stripe_health,
-        api_key=os.getenv("OPENAI_API_KEY"),
+    audit_decision = _stage(
+        "Agent 2: CFO Auditor", "Cross-referencing Stripe ledger & DNA",
+        lambda: run_cfo_auditor(
+            cart=cart_data,
+            market_data=market_benchmarks,
+            company_rules=company_dna,
+            financials=stripe_health,
+            api_key=os.getenv("OPENAI_API_KEY"),
+        ),
     )
 
     capsules = _build_ui_capsules(audit_decision, market_benchmarks, stripe_health, company_dna, cart_data)
+
+    # Proof-of-tool-use: surface the real query Agent 1 formulated and the data sources hit.
+    tool_use = {
+        "exa_query": exa_query,
+        "exa_mode": market_benchmarks.get("mode", "unknown"),
+        "exa_sources": [s.get("url", "") for s in market_benchmarks.get("sources", [])][:3],
+        "stripe_mode": stripe_health.get("mode", "unknown"),
+        "pending_auth_id": pending_auth_id,
+    }
+
+    # Cache context for HITL justification re-evaluation at /api/v1/review.
+    _AUDIT_SESSIONS[pending_auth_id] = {
+        "cart": cart_data,
+        "market_data": market_benchmarks,
+        "company_dna": company_dna,
+        "financials": stripe_health,
+        "signals": audit_decision.get("signals", {}),
+    }
 
     return {
         "cart": cart_data,
         "exa_query": exa_query,
         "pending_auth_id": pending_auth_id,
+        "telemetry": telemetry,
+        "tool_use": tool_use,
         "audit": {
             "is_flagged": audit_decision.get("is_flagged", False),
             "missing_context_question": audit_decision.get("missing_context_question", ""),
+            "chain_of_thought": audit_decision.get("chain_of_thought", []),
             "capsules": capsules,
             "signals": audit_decision.get("signals", {}),
         },
@@ -232,7 +286,38 @@ def resolve_v1(
     result = resolve_authorization(auth_id=body.auth_id, action=bridge_action)
     result["justification"] = body.justification
     result["action"] = action
+    _AUDIT_SESSIONS.pop(body.auth_id, None)
     return result
+
+
+@app.post("/api/v1/review")
+def review_v1(body: ResolveBody) -> dict[str, Any]:
+    """
+    HITL: re-evaluate a flagged purchase against the human's justification.
+    Returns whether the CFO Auditor accepts the override and its reasoning trace,
+    WITHOUT yet moving money — the client calls /api/v1/resolve on acceptance.
+    """
+    if not body.justification.strip():
+        raise HTTPException(status_code=400, detail="Justification required for review.")
+
+    ctx = _AUDIT_SESSIONS.get(body.auth_id)
+    if not ctx:
+        # No cached context (e.g. fallback session) — accept substantive justification heuristically.
+        return reevaluate_with_justification(
+            cart={}, market_data={}, company_rules={}, financials={},
+            prior_signals={}, justification=body.justification,
+            api_key=os.getenv("OPENAI_API_KEY"),
+        )
+
+    return reevaluate_with_justification(
+        cart=ctx["cart"],
+        market_data=ctx["market_data"],
+        company_rules=ctx["company_dna"],
+        financials=ctx["financials"],
+        prior_signals=ctx["signals"],
+        justification=body.justification,
+        api_key=os.getenv("OPENAI_API_KEY"),
+    )
 
 
 # Legacy routes (backward compatible)

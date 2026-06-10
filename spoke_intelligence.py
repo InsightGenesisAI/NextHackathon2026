@@ -62,8 +62,11 @@ def run_cfo_auditor(
     system = (
         "You are AgentCFO, a corporate fiscal alignment auditor. Synthesize market, "
         "financial, and company-policy data. Respond ONLY with valid JSON keys: "
+        "chain_of_thought (array of 3-6 short strings, each a single reasoning step you took "
+        "BEFORE concluding, e.g. 'Step 1: Recognized GitHub seats priced 22% above market.'), "
         "is_flagged (bool), concise_analysis (string, 2-4 sentences with emoji section headers "
-        "like '🛑 APE Intercept'), missing_context_question (string, one specific question)."
+        "like '🛑 APE Intercept'), missing_context_question (string, one specific, context-aware "
+        "question that asks for the exact data you are missing rather than a generic block)."
     )
     user_payload = {
         "cart": cart,
@@ -86,6 +89,10 @@ def run_cfo_auditor(
         content = response.choices[0].message.content or "{}"
         verdict = json.loads(content)
         verdict.setdefault("is_flagged", deterministic["is_flagged"])
+        if not verdict.get("chain_of_thought"):
+            verdict["chain_of_thought"] = _build_chain_of_thought(
+                cart, market_data, company_rules, financials, deterministic
+            )
         verdict["signals"] = deterministic
         return verdict
     except Exception:
@@ -120,6 +127,157 @@ def _deterministic_audit_signals(
         "department_projected_utilization_percent": round(projected_pct, 1),
         "cash_runway_months": financials.get("cash_runway_months"),
     }
+
+
+def _build_chain_of_thought(
+    cart: dict[str, Any],
+    market_data: dict[str, Any],
+    company_rules: dict[str, Any],
+    financials: dict[str, Any],
+    signals: dict[str, Any],
+) -> list[str]:
+    """Deterministic reasoning trace — fallback and a guaranteed audit log."""
+    steps: list[str] = []
+    premium = signals.get("market_premium_percent", 0)
+    merchant = cart.get("merchant", "vendor")
+
+    steps.append(
+        f"Step 1: Parsed cart from {merchant} totaling "
+        f"${cart.get('amount_cents', 0) / 100:,.2f}."
+    )
+    if premium >= 10:
+        steps.append(
+            f"Step 2: Exa benchmark scan shows pricing ~{premium}% above standard B2B volume rates."
+        )
+    else:
+        steps.append("Step 2: Exa benchmark scan shows pricing within normal B2B range.")
+
+    duplicates = signals.get("stack_duplicates", [])
+    if duplicates:
+        alt = duplicates[0]
+        steps.append(
+            f"Step 3: Checked Stack Registry — found {alt['unused_seats']} unused "
+            f"{alt['existing_tool']} licenses in the same category."
+        )
+    else:
+        steps.append("Step 3: Checked Stack Registry — no redundant tooling detected.")
+
+    util = signals.get("department_projected_utilization_percent", 0)
+    steps.append(
+        f"Step 4: Cross-referenced Stripe ledger — department budget projects to {util:.0f}% "
+        f"with cash runway ~{signals.get('cash_runway_months', 'n/a')} months."
+    )
+
+    violations = signals.get("policy_violations", [])
+    if violations:
+        steps.append(
+            f"Step 5: Matched {len(violations)} expense policy violation(s): "
+            f"{violations[0].get('rule_id', 'policy')}."
+        )
+
+    decision = "FLAG for human review" if signals.get("is_flagged") else "CLEAR to proceed"
+    steps.append(f"Decision: {decision}.")
+    return steps
+
+
+def reevaluate_with_justification(
+    cart: dict[str, Any],
+    market_data: dict[str, Any],
+    company_rules: dict[str, Any],
+    financials: dict[str, Any],
+    prior_signals: dict[str, Any],
+    justification: str,
+    api_key: str | None = None,
+) -> dict[str, Any]:
+    """
+    HITL: re-run the CFO Auditor with the human's justification as new context.
+    Returns {approved: bool, reasoning: str, chain_of_thought: list[str]}.
+    """
+    key = api_key or os.getenv("OPENAI_API_KEY")
+    justification = (justification or "").strip()
+
+    if not justification:
+        return {
+            "approved": False,
+            "reasoning": "No justification provided. Purchase remains flagged.",
+            "chain_of_thought": ["Step 1: Empty justification received.", "Decision: Hold flag."],
+        }
+
+    if not key:
+        return _simulated_reevaluation(cart, prior_signals, justification)
+
+    client = OpenAI(api_key=key)
+    system = (
+        "You are AgentCFO performing a human-in-the-loop override review. The purchase was "
+        "previously flagged. A human has supplied a justification. Decide whether the justification "
+        "provides sufficient business context to APPROVE the override. Respond ONLY with valid JSON: "
+        "chain_of_thought (array of 2-4 short reasoning steps), approved (bool), "
+        "reasoning (string, 1-2 sentences explaining the decision to the human)."
+    )
+    payload = {
+        "cart": cart,
+        "prior_signals": prior_signals,
+        "human_justification": justification,
+        "company_dna": company_rules,
+        "stripe_financials": financials,
+    }
+    try:
+        response = client.chat.completions.create(
+            model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": json.dumps(payload, default=str)},
+            ],
+            temperature=0.3,
+            response_format={"type": "json_object"},
+        )
+        verdict = json.loads(response.choices[0].message.content or "{}")
+        verdict.setdefault("approved", True)
+        verdict.setdefault("reasoning", "Justification accepted.")
+        if not verdict.get("chain_of_thought"):
+            verdict["chain_of_thought"] = [
+                f"Step 1: Received human context: '{justification[:80]}'.",
+                "Step 2: Weighed context against flagged signals.",
+                f"Decision: {'Approve override' if verdict['approved'] else 'Hold flag'}.",
+            ]
+        return verdict
+    except Exception:
+        return _simulated_reevaluation(cart, prior_signals, justification)
+
+
+def _simulated_reevaluation(
+    cart: dict[str, Any], prior_signals: dict[str, Any], justification: str
+) -> dict[str, Any]:
+    """Heuristic HITL review when OpenAI is unavailable: accepts substantive justifications."""
+    words = len(justification.split())
+    context_terms = (
+        "test", "load", "launch", "deadline", "client", "production", "hackathon",
+        "migration", "compliance", "security", "outage", "scale", "contract",
+    )
+    has_context = any(term in justification.lower() for term in context_terms)
+    approved = words >= 4 and has_context
+
+    if approved:
+        reasoning = (
+            "Human justification supplies time-bound business context that outweighs the flagged "
+            "signals. Approving override and logging to CFO."
+        )
+        steps = [
+            f"Step 1: Received human context: '{justification[:80]}'.",
+            "Step 2: Context cites a concrete operational need not visible in ledger data.",
+            "Decision: Approve override and log rationale to CFO.",
+        ]
+    else:
+        reasoning = (
+            "Justification lacks specific business context (expected a concrete operational reason). "
+            "Purchase remains flagged for executive approval."
+        )
+        steps = [
+            f"Step 1: Received human context: '{justification[:80]}'.",
+            "Step 2: No concrete operational driver detected in justification.",
+            "Decision: Hold flag pending stronger justification.",
+        ]
+    return {"approved": approved, "reasoning": reasoning, "chain_of_thought": steps}
 
 
 def _simulated_exa_query(raw_cart: dict[str, Any]) -> str:
@@ -184,6 +342,9 @@ def _simulated_cfo_verdict(
 
     return {
         "is_flagged": signals["is_flagged"],
+        "chain_of_thought": _build_chain_of_thought(
+            cart, market_data, company_rules, financials, signals
+        ),
         "concise_analysis": analysis,
         "missing_context_question": question,
         "signals": signals,

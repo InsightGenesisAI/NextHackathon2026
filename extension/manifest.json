@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "AgentCFO — APE Procurement Gatekeeper",
-  "version": "1.4.0",
-  "description": "Thin-client checkout interceptor — all intelligence runs on the Python APE backend.",
+  "version": "1.5.0",
+  "description": "Thin-client checkout interceptor — Glass Brain telemetry, chain-of-thought audit logs, and HITL override. All intelligence runs on the Python APE backend.",
   "permissions": ["storage", "activeTab"],
   "host_permissions": [
     "http://127.0.0.1:8787/*",

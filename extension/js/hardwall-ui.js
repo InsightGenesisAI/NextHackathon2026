@@ -54,20 +54,70 @@ const LiquidGlassUI = (() => {
     return overlayEl;
   }
 
+  // Pipeline stages shown live while Python runs the multi-agent orchestration.
+  const PIPELINE_STAGES = [
+    { agent: "Agent 1: Search Strategist", label: "Compiling Exa query", icon: "dna" },
+    { agent: "Exa API", label: "Pulling market benchmarks", icon: "exa" },
+    { agent: "Agent 2: CFO Auditor", label: "Cross-referencing Stripe ledger", icon: "stripe" },
+  ];
+
+  let _telemetryTimer = null;
+
   function showLoadingPulse() {
     const overlay = ensureOverlay();
     overlay.className = "ape-glass ape-glass--loading";
+
+    const rows = PIPELINE_STAGES.map(
+      (s, i) => `
+        <li class="ape-telem-row" data-stage="${i}">
+          <span class="ape-telem-spinner" aria-hidden="true"></span>
+          <span class="ape-telem-agent">${escapeHtml(s.agent)}</span>
+          <span class="ape-telem-label">${escapeHtml(s.label)}…</span>
+          <span class="ape-telem-status">Queued</span>
+        </li>`
+    ).join("");
+
     overlay.innerHTML = `
       <div class="ape-eco-aurora" aria-hidden="true"></div>
       <div class="ape-glass-modal ape-glass-modal--pulse" role="status">
         <div class="ape-glint-sweep" aria-hidden="true"></div>
         <div class="ape-eco-banner">
           <span class="ape-leaf-pulse">${ICONS.leaf}</span>
-          <div><h1 class="ape-banner-title">APE Intercept</h1>
-          <p class="ape-banner-sub">Scanning procurement signals…</p></div>
+          <div><h1 class="ape-banner-title">APE Intercept · Glass Brain</h1>
+          <p class="ape-banner-sub">Orchestrating multi-agent procurement audit…</p></div>
         </div>
+        <ul class="ape-telemetry" id="ape-telemetry" aria-label="Live agent telemetry">${rows}</ul>
         <div class="ape-scan-line"><span class="ape-scan-dot"></span>Python hub · Exa · Stripe · OpenAI</div>
       </div>`;
+
+    _animateTelemetry();
+  }
+
+  /** Sequentially light up pipeline stages to visualize the live agent handoff. */
+  function _animateTelemetry() {
+    clearInterval(_telemetryTimer);
+    let i = 0;
+    const advance = () => {
+      const rows = overlayEl?.querySelectorAll(".ape-telem-row");
+      if (!rows || !rows.length) return;
+      if (i > 0) {
+        rows[i - 1].classList.remove("ape-telem-row--active");
+        rows[i - 1].classList.add("ape-telem-row--done");
+        rows[i - 1].querySelector(".ape-telem-status").textContent = "Thinking…";
+      }
+      if (i < rows.length) {
+        rows[i].classList.add("ape-telem-row--active");
+        rows[i].querySelector(".ape-telem-status").textContent = "Running…";
+        i += 1;
+      }
+    };
+    advance();
+    _telemetryTimer = setInterval(advance, 950);
+  }
+
+  function _stopTelemetry() {
+    clearInterval(_telemetryTimer);
+    _telemetryTimer = null;
   }
 
   function renderMarketCapsule(c) {
@@ -175,6 +225,7 @@ const LiquidGlassUI = (() => {
   }
 
   function renderAuditPanel(auditResponse, checkoutContext = {}) {
+    _stopTelemetry();
     const overlay = ensureOverlay();
     const audit = auditResponse.audit || auditResponse;
     session.pendingAuthId = auditResponse.pending_auth_id;
@@ -201,6 +252,8 @@ const LiquidGlassUI = (() => {
           ${populateGlassCapsules(audit.capsules)}
         </section>
 
+        ${renderAuditLogs(auditResponse, audit)}
+
         <footer class="ape-gatekeeper">
           <label class="ape-gatekeeper-label" for="ape-justification">
             <span class="ape-label-tag">Context Required</span>
@@ -219,7 +272,7 @@ const LiquidGlassUI = (() => {
               Submit Justification to CFO
             </button>
           </div>
-          ${session.showFailOpen ? `<button type="button" id="ape-failopen" class="ape-gel-btn ape-gel-btn--soft">Proceed without audit</button>` : ""}
+          ${session.showFailOpen ? `<button type="button" id="ape-failopen" class="ape-gel-btn ape-gel-btn--soft">Proceed without audit (Fail-Open Bypass)</button>` : ""}
           <p id="ape-status" class="ape-glass-status" hidden></p>
         </footer>
       </div>`;
@@ -232,6 +285,52 @@ const LiquidGlassUI = (() => {
       handleOverrideSubmit(overlay.querySelector("#ape-justification").value);
     });
     overlay.querySelector("#ape-failopen")?.addEventListener("click", handleFailOpenProceed);
+  }
+
+  /** Collapsible "Audit Logs" — proves multi-agent orchestration + real tool use. */
+  function renderAuditLogs(auditResponse, audit) {
+    const telemetry = auditResponse.telemetry || [];
+    const tool = auditResponse.tool_use || {};
+    const cot = audit.chain_of_thought || [];
+
+    const telemRows = telemetry
+      .map(
+        (t) => `<li class="ape-log-line ape-log-line--${t.status || "done"}">
+          <span class="ape-log-agent">${escapeHtml(t.agent)}</span>
+          <span class="ape-log-label">${escapeHtml(t.label)}</span>
+          <span class="ape-log-ms">${t.status === "error" ? "ERR" : "[Done: " + t.ms + "ms]"}</span>
+        </li>`
+      )
+      .join("");
+
+    const cotRows = cot
+      .map((step) => `<li class="ape-cot-step">${escapeHtml(step)}</li>`)
+      .join("");
+
+    const sources = (tool.exa_sources || [])
+      .filter(Boolean)
+      .map((u) => `<li class="ape-tool-src">${escapeHtml(u)}</li>`)
+      .join("");
+
+    return `
+      <details class="ape-audit-logs">
+        <summary class="ape-audit-summary">
+          <span class="ape-term-dot"></span> Audit Logs · Terminal View
+          <span class="ape-audit-hint">multi-agent reasoning trace</span>
+        </summary>
+        <div class="ape-audit-body">
+          ${telemRows ? `<p class="ape-log-head">Orchestration Pipeline</p><ul class="ape-log-list">${telemRows}</ul>` : ""}
+          ${cotRows ? `<p class="ape-log-head">CFO Auditor · Chain of Thought</p><ol class="ape-cot-list">${cotRows}</ol>` : ""}
+          <p class="ape-log-head">Tool Use · Live Data Cited</p>
+          <ul class="ape-tool-list">
+            <li><span class="ape-tool-k">Exa query (Agent 1)</span><span class="ape-tool-v">${escapeHtml(tool.exa_query || auditResponse.exa_query || "—")}</span></li>
+            <li><span class="ape-tool-k">Exa mode</span><span class="ape-tool-v">${escapeHtml(tool.exa_mode || "—")}</span></li>
+            <li><span class="ape-tool-k">Stripe mode</span><span class="ape-tool-v">${escapeHtml(tool.stripe_mode || "—")}</span></li>
+            <li><span class="ape-tool-k">Stripe auth hold</span><span class="ape-tool-v">${escapeHtml(tool.pending_auth_id || auditResponse.pending_auth_id || "—")}</span></li>
+          </ul>
+          ${sources ? `<p class="ape-log-head">Exa Sources</p><ul class="ape-tool-list">${sources}</ul>` : ""}
+        </div>
+      </details>`;
   }
 
   async function handleAbortClick() {
@@ -268,7 +367,29 @@ const LiquidGlassUI = (() => {
 
     status.hidden = false;
     status.className = "ape-glass-status";
-    status.textContent = "Submitting override to Python hub…";
+    status.textContent = "CFO Auditor re-evaluating your justification…";
+
+    // HITL: agent dynamically reviews the human's context before any money moves.
+    let review = { approved: true, reasoning: "", chain_of_thought: [] };
+    try {
+      if (session.pendingAuthId) {
+        review = await PythonBridge.reviewWithPython(session.pendingAuthId, justification);
+      }
+    } catch (err) {
+      // If review is unreachable, fall through to direct approval (fail-open on review only).
+      review = { approved: true, reasoning: `Review skipped (${err.message}).`, chain_of_thought: [] };
+    }
+
+    renderReviewReasoning(review);
+
+    if (!review.approved) {
+      status.className = "ape-glass-status ape-glass-status--error";
+      status.textContent = review.reasoning || "Justification insufficient — purchase remains flagged.";
+      return;
+    }
+
+    status.className = "ape-glass-status";
+    status.textContent = "Justification accepted — releasing funds via Stripe…";
 
     try {
       if (session.pendingAuthId) {
@@ -293,12 +414,36 @@ const LiquidGlassUI = (() => {
     }
   }
 
+  /** Show the agent's HITL reasoning trace after a justification is submitted. */
+  function renderReviewReasoning(review) {
+    if (!overlayEl) return;
+    const existing = overlayEl.querySelector("#ape-review-trace");
+    if (existing) existing.remove();
+
+    const steps = (review.chain_of_thought || [])
+      .map((s) => `<li class="ape-cot-step">${escapeHtml(s)}</li>`)
+      .join("");
+    const verdictClass = review.approved ? "ape-review--ok" : "ape-review--hold";
+
+    const block = document.createElement("div");
+    block.id = "ape-review-trace";
+    block.className = `ape-review-trace ${verdictClass}`;
+    block.innerHTML = `
+      <p class="ape-review-verdict">${review.approved ? "✅ Override Approved by CFO Auditor" : "⏸ Held — Stronger Context Needed"}</p>
+      ${review.reasoning ? `<p class="ape-review-reason">${escapeHtml(review.reasoning)}</p>` : ""}
+      ${steps ? `<ol class="ape-cot-list">${steps}</ol>` : ""}`;
+
+    const footer = overlayEl.querySelector(".ape-gatekeeper");
+    footer?.insertBefore(block, footer.querySelector(".ape-glass-actions"));
+  }
+
   function handleFailOpenProceed() {
     destroyModal();
     SpokeExtension.triggerOriginalCheckout(session.originButton, session.originForm);
   }
 
   function destroyModal() {
+    _stopTelemetry();
     const cb = session.onSessionEnd;
     overlayEl?.remove();
     overlayEl = null;
