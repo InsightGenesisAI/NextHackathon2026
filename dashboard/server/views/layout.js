@@ -37,7 +37,14 @@ function sidebar(pathname) {
   </aside>`;
 }
 
-function topnav() {
+function topnav(user) {
+  const account = user
+    ? `<div class="hidden items-center gap-2 sm:flex">
+         <span class="text-sm font-medium text-ink-soft">${esc(user.company || user.name || "")}</span>
+         <a href="/logout" class="flex h-9 items-center gap-1.5 rounded-xl px-2.5 text-sm font-medium text-ink-soft hover:bg-gray-50" title="Sign out"><i data-lucide="log-out" class="h-4 w-4"></i>Sign out</a>
+       </div>`
+    : "";
+  const initial = user && user.name ? esc(user.name.trim()[0].toUpperCase()) : "A";
   return `<header class="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-gray-100 bg-white/80 px-4 backdrop-blur sm:px-6 lg:px-8">
     <a href="/" class="flex items-center gap-2 lg:hidden"><span class="text-base font-bold text-ink">AgentCFO</span></a>
     <div class="hidden flex-1 items-center sm:flex">
@@ -47,6 +54,7 @@ function topnav() {
       </div>
     </div>
     <div class="ml-auto flex items-center gap-3">
+      ${account}
       <span class="hidden items-center gap-1.5 rounded-full bg-brand-50 px-3 py-1.5 text-xs font-semibold text-brand-700 sm:flex">
         <i data-lucide="shield-check" class="h-3.5 w-3.5"></i>Protection ON
       </span>
@@ -54,12 +62,12 @@ function topnav() {
         <i data-lucide="bell" class="h-5 w-5"></i>
         <span class="absolute right-2 top-2 h-2 w-2 rounded-full bg-brand-500"></span>
       </button>
-      <div class="flex h-9 w-9 items-center justify-center rounded-full bg-brand-500 text-sm font-semibold text-white">A</div>
+      <div class="flex h-9 w-9 items-center justify-center rounded-full bg-brand-500 text-sm font-semibold text-white">${initial}</div>
     </div>
   </header>`;
 }
 
-function layout({ title, pathname, body, extraScript = "" }) {
+function layout({ title, pathname, body, extraScript = "", user = null }) {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -103,7 +111,7 @@ function layout({ title, pathname, body, extraScript = "" }) {
   <div class="flex min-h-screen bg-canvas">
     ${sidebar(pathname)}
     <div class="flex min-w-0 flex-1 flex-col">
-      ${topnav()}
+      ${topnav(user)}
       <main class="flex-1 px-4 py-6 sm:px-6 lg:px-8">
         <div class="mx-auto w-full max-w-6xl">${body}</div>
       </main>

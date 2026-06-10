@@ -297,7 +297,7 @@ function reviewPage({ review, activity }) {
 }
 
 // ── Settings (static + client toggles) ──
-function settingsPage() {
+function settingsPage({ user } = {}) {
   const row = (icon, title, desc, control = "") => `<div class="flex items-center gap-3 rounded-xl px-1 py-3">
     <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-canvas text-ink-soft"><i data-lucide="${icon}" class="h-5 w-5"></i></span>
     <div class="flex-1"><p class="text-sm font-semibold text-ink">${esc(title)}</p><p class="text-xs text-ink-soft">${esc(desc)}</p></div>${control}
@@ -308,10 +308,35 @@ function settingsPage() {
     <div><p class="text-sm font-semibold text-ink">${esc(label)}</p><p class="text-xs text-ink-soft">${esc(desc)}</p></div>
   </button>`;
 
+  // Build a company-profile summary from onboarding answers, if present.
+  let profileCard = "";
+  const profile = user && user.profile;
+  if (profile) {
+    const b = profile.basics || {};
+    const basicRows = [
+      ["briefcase", "Industry", b.industry],
+      ["users", "Team size", b.size],
+      ["wallet", "Monthly tool spend", b.monthlySpend],
+      ["target", "Top priority", b.priority],
+      ["package", "Biggest categories", b.tools],
+    ].filter(([, , v]) => v).map(([icon, label, v]) => row(icon, label, v)).join("");
+
+    const aiRows = (profile.aiAnswers || []).filter((a) => a.answer).map((a) =>
+      `<div class="rounded-xl bg-canvas px-3.5 py-3"><p class="text-xs font-semibold text-ink-soft">${esc(a.question)}</p><p class="mt-1 text-sm text-ink">${esc(a.answer)}</p></div>`
+    ).join("");
+
+    profileCard = P.card(P.cardHeader("Company profile", "What you told AgentCFO during setup.", `<a href="/onboarding" class="rounded-xl border border-gray-200 px-3 py-1.5 text-xs font-semibold text-ink-soft hover:bg-gray-50">Update</a>`) +
+      `<div class="space-y-1 px-5 pb-3 pt-3">${basicRows || `<p class="py-2 text-sm text-ink-faint">No business details yet.</p>`}</div>` +
+      (aiRows ? `<div class="space-y-2 px-5 pb-5">${aiRows}</div>` : ""));
+  }
+
+  const companyDesc = user ? `${user.company || "Your company"} · ${user.email}` : "Acme Co · Small business plan";
+
   const body = `<div class="space-y-4">
+    ${P.card(P.cardHeader("Account", "Your sign-in details.") + `<div class="space-y-1 px-5 pb-5 pt-3">${row("user", user ? user.name : "Account", user ? user.email : "—")}${row("building-2", "Company", companyDesc)}<div class="px-1 pt-2"><a href="/logout" class="inline-flex items-center gap-1.5 rounded-xl border border-gray-200 px-3.5 py-2 text-sm font-semibold text-ink-soft hover:bg-gray-50"><i data-lucide="log-out" class="h-4 w-4"></i>Sign out</a></div></div>`)}
+    ${profileCard}
     ${P.card(P.cardHeader("Protection", "Let AgentCFO review purchases as they happen.") + `<div class="space-y-1 px-5 pb-5 pt-3">${row("shield-check", "Purchase protection", "Review checkouts before you buy.", toggle("protection", true))}${row("bell", "Email alerts", "Get notified when something needs a look.", toggle("alerts", true))}</div>`)}
     ${P.card(P.cardHeader("If the review is slow", "What should happen if AgentCFO can't finish in time.") + `<div class="space-y-2 px-5 pb-5 pt-3">${radio("Pause and let me decide", "Hold the checkout until the review finishes or I choose to continue.", true, "risk")}${radio("Let it through, log for follow-up", "Continue checkout and flag the purchase for later review.", false, "risk")}</div>`)}
-    ${P.card(P.cardHeader("Business profile", "Helps AgentCFO understand your spending.") + `<div class="space-y-1 px-5 pb-5 pt-3">${row("building-2", "Company", "Acme Co · Small business plan")}${row("wallet", "Connected card", "Stripe · Team tier")}</div>`)}
   </div>`;
   return `<div class="max-w-2xl">${P.pageHeader("Settings", "Tune how AgentCFO works for your business.")}${body}</div>`;
 }

@@ -27,6 +27,34 @@ Set `PORT` to change the port:
 PORT=8080 npm start
 ```
 
+## Accounts & onboarding
+
+- `/signup` — create an account (name, company, email, password). Passwords are
+  hashed with Node's built-in `crypto` (scrypt). Sessions are cookie-based.
+- `/login`, `/logout` — sign in / out.
+- After signup, users go through a 2-step onboarding wizard:
+  1. **Hardcoded questions** about the business (industry, size, spend, priority).
+  2. **AI follow-up questions** tailored to those answers, for deeper context.
+
+The dashboard pages are gated: signed-out users are sent to `/login`, and
+signed-in users who haven't finished onboarding are sent to `/onboarding`. The
+saved company profile appears on the Settings page and personalizes the
+dashboard greeting.
+
+### AI follow-up questions
+
+The onboarding AI step uses OpenAI when `OPENAI_API_KEY` is set; otherwise it
+falls back to a built-in heuristic generator so onboarding never breaks.
+
+```bash
+OPENAI_API_KEY=sk-...           # optional, enables AI-personalized questions
+OPENAI_MODEL=gpt-4o-mini        # optional, defaults to gpt-4o-mini
+```
+
+> Accounts, sessions, and profiles are in-memory, so they reset on restart and
+> on serverless cold starts. Swap `server/auth.js` for a database + durable
+> session store for production.
+
 ## Pages
 
 - `/` — greeting, today-at-a-glance metrics, recent activity, demo review modal

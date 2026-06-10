@@ -71,10 +71,22 @@ function getAgentActivity() {
   return state.activity;
 }
 
+// Personalize the summary with the signed-in user's name/company.
+function getDashboardSummaryForUser(user) {
+  const base = getDashboardSummary();
+  if (!user) return base;
+  return {
+    ...base,
+    greetingName: (user.name || "").split(" ")[0] || base.greetingName,
+    company: user.company || "",
+  };
+}
+
 module.exports = {
   getRecentPurchases,
   recordPurchase,
   getDashboardSummary,
+  getDashboardSummaryForUser,
   getFinancialHealth,
   getActions,
   getAgentActivity,

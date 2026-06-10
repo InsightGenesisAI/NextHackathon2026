@@ -15,6 +15,9 @@ const { mockReview } = require("./mockData");
 const { layout } = require("./views/layout");
 const pages = require("./views/pages");
 const { CLIENT_JS } = require("./clientScript");
+const auth = require("./auth");
+const authViews = require("./views/auth");
+const onboarding = require("./onboarding");
 
 const PORT = process.env.PORT || 3000;
 
@@ -58,35 +61,60 @@ function readBody(req) {
   });
 }
 
+// Parse a urlencoded (HTML form) body into a plain object.
+function readForm(req) {
+  return new Promise((resolve, reject) => {
+    let raw = "";
+    req.on("data", (chunk) => {
+      raw += chunk;
+      if (raw.length > 1e6) { reject(new Error("Body too large")); req.destroy(); }
+    });
+    req.on("end", () => {
+      const out = {};
+      const params = new URLSearchParams(raw);
+      for (const [k, v] of params) out[k] = v;
+      resolve(out);
+    });
+    req.on("error", reject);
+  });
+}
+
+function redirect(res, location, cookie) {
+  const headers = { Location: location };
+  if (cookie) headers["Set-Cookie"] = cookie;
+  res.writeHead(302, headers);
+  res.end();
+}
+
 const SCRIPT_TAG = '<script src="/app.js"></script>';
 
 // ── Page routing ──
-function renderPage(pathname) {
+function renderPage(pathname, user) {
   switch (pathname) {
     case "/":
-      return layout({ title: "AgentCFO — Your AI Finance Assistant", pathname, extraScript: SCRIPT_TAG,
-        body: pages.homePage({ summary: store.getDashboardSummary(), purchases: store.getRecentPurchases(), review: mockReview }) });
+      return layout({ title: "AgentCFO — Your AI Finance Assistant", pathname, user, extraScript: SCRIPT_TAG,
+        body: pages.homePage({ summary: store.getDashboardSummaryForUser(user), purchases: store.getRecentPurchases(), review: mockReview }) });
     case "/purchases":
-      return layout({ title: "Purchases — AgentCFO", pathname, extraScript: SCRIPT_TAG,
+      return layout({ title: "Purchases — AgentCFO", pathname, user, extraScript: SCRIPT_TAG,
         body: pages.purchasesPage({ purchases: store.getRecentPurchases() }) });
     case "/savings":
-      return layout({ title: "Savings — AgentCFO", pathname, extraScript: SCRIPT_TAG,
-        body: pages.savingsPage({ purchases: store.getRecentPurchases(), summary: store.getDashboardSummary() }) });
+      return layout({ title: "Savings — AgentCFO", pathname, user, extraScript: SCRIPT_TAG,
+        body: pages.savingsPage({ purchases: store.getRecentPurchases(), summary: store.getDashboardSummaryForUser(user) }) });
     case "/insights":
-      return layout({ title: "Financial Health — AgentCFO", pathname, extraScript: SCRIPT_TAG,
+      return layout({ title: "Financial Health — AgentCFO", pathname, user, extraScript: SCRIPT_TAG,
         body: pages.insightsPage({ health: store.getFinancialHealth() }) });
     case "/alerts":
-      return layout({ title: "Alerts — AgentCFO", pathname, extraScript: SCRIPT_TAG,
+      return layout({ title: "Alerts — AgentCFO", pathname, user, extraScript: SCRIPT_TAG,
         body: pages.alertsPage({ purchases: store.getRecentPurchases() }) });
     case "/todo":
-      return layout({ title: "To Do — AgentCFO", pathname, extraScript: SCRIPT_TAG,
+      return layout({ title: "To Do — AgentCFO", pathname, user, extraScript: SCRIPT_TAG,
         body: pages.todoPage(store.getActions()) });
     case "/review":
-      return layout({ title: "Purchase Review — AgentCFO", pathname, extraScript: SCRIPT_TAG,
+      return layout({ title: "Purchase Review — AgentCFO", pathname, user, extraScript: SCRIPT_TAG,
         body: pages.reviewPage({ review: mockReview, activity: store.getAgentActivity() }) });
     case "/settings":
-      return layout({ title: "Settings — AgentCFO", pathname, extraScript: SCRIPT_TAG,
-        body: pages.settingsPage() });
+      return layout({ title: "Settings — AgentCFO", pathname, user, extraScript: SCRIPT_TAG,
+        body: pages.settingsPage({ user }) });
     default:
       return null;
   }
@@ -152,6 +180,93 @@ function serveClientScript(res) {
   res.end(CLIENT_JS);
 }
 
+const PROTECTED_PAGES = ["/", "/purchases", "/savings", "/insights", "/alerts", "/todo", "/review", "/settings"];
+
+// ── Auth + onboarding routes. Returns true if it handled the request. ──
+async function handleAuth(req, res, pathname) {
+  // GET pages
+  if (req.method === "GET" && pathname === "/login") {
+    sendHtml(res, 200, authViews.loginPage());
+    return true;
+  }
+  if (req.method === "GET" && pathname === "/signup") {
+    sendHtml(res, 200, authViews.signupPage());
+    return true;
+  }
+  if (req.method === "GET" && pathname === "/logout") {
+    const { sid } = auth.parseCookies(req);
+    auth.destroySession(sid);
+    redirect(res, "/login", auth.clearCookie());
+    return true;
+  }
+
+  // POST signup
+  if (req.method === "POST" && pathname === "/signup") {
+    const form = await readForm(req);
+    try {
+      const user = auth.createUser(form);
+      const token = auth.createSession(user.email);
+      redirect(res, "/onboarding", auth.sessionCookie(token));
+    } catch (e) {
+      sendHtml(res, 200, authViews.signupPage({ error: e.message, values: form }));
+    }
+    return true;
+  }
+
+  // POST login
+  if (req.method === "POST" && pathname === "/login") {
+    const form = await readForm(req);
+    const user = auth.authenticate(form.email, form.password);
+    if (!user) {
+      sendHtml(res, 200, authViews.loginPage({ error: "Incorrect email or password." }));
+      return true;
+    }
+    const token = auth.createSession(user.email);
+    redirect(res, user.profileComplete ? "/" : "/onboarding", auth.sessionCookie(token));
+    return true;
+  }
+
+  // Onboarding (requires a session)
+  if (pathname === "/onboarding" || pathname.startsWith("/onboarding/")) {
+    const user = auth.userFromRequest(req);
+    if (!user) { redirect(res, "/login"); return true; }
+
+    // Step 1 form
+    if (req.method === "GET" && pathname === "/onboarding") {
+      sendHtml(res, 200, authViews.onboardingBasePage({ user, questions: onboarding.getBaseQuestions() }));
+      return true;
+    }
+
+    // Step 1 submit → generate AI follow-ups → step 2
+    if (req.method === "POST" && pathname === "/onboarding/basics") {
+      const form = await readForm(req);
+      const basics = { company: user.company, ...form };
+      const { questions, source } = await onboarding.generateFollowupQuestions(basics);
+      auth.setPendingOnboarding(user.email, { basics, aiQuestions: questions, aiSource: source });
+      sendHtml(res, 200, authViews.onboardingAiPage({ user, questions, source }));
+      return true;
+    }
+
+    // Step 2 submit → save profile → dashboard
+    if (req.method === "POST" && pathname === "/onboarding/ai") {
+      const form = await readForm(req);
+      const pending = auth.getPendingOnboarding(user.email) || { basics: {}, aiQuestions: [] };
+      const aiAnswers = [];
+      const count = parseInt(form.ai_count || "0", 10);
+      for (let i = 0; i < count; i++) {
+        const q = form[`ai_q_${i}`];
+        const a = form[`ai_${i}`];
+        if (q) aiAnswers.push({ question: q, answer: (a || "").trim() });
+      }
+      auth.saveProfile(user.email, { basics: pending.basics, aiQuestions: pending.aiQuestions, aiAnswers, completedAt: new Date().toISOString() });
+      redirect(res, "/");
+      return true;
+    }
+  }
+
+  return false;
+}
+
 async function handler(req, res) {
   const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
   const pathname = url.pathname;
@@ -159,16 +274,28 @@ async function handler(req, res) {
   try {
     if (pathname.startsWith("/api/")) return await handleApi(req, res, pathname);
 
-    if (req.method === "GET") {
-      // Client script served from memory.
-      if (pathname === "/app.js") return serveClientScript(res);
+    // Client script served from memory (public).
+    if (req.method === "GET" && pathname === "/app.js") return serveClientScript(res);
 
-      const html = renderPage(pathname);
+    // Auth + onboarding routes (login, signup, logout, onboarding steps).
+    if (await handleAuth(req, res, pathname)) return;
+
+    if (req.method === "GET") {
+      const user = auth.userFromRequest(req);
+
+      // Gate the dashboard: signed-out users go to login; signed-in users
+      // who haven't finished onboarding go to the wizard.
+      if (PROTECTED_PAGES.includes(pathname)) {
+        if (!user) return redirect(res, "/login");
+        if (!user.profileComplete) return redirect(res, "/onboarding");
+      }
+
+      const html = renderPage(pathname, user);
       if (html) return sendHtml(res, 200, html);
 
       // 404 page
       return sendHtml(res, 404, layout({
-        title: "Not found — AgentCFO", pathname,
+        title: "Not found — AgentCFO", pathname, user,
         body: `<div class="py-20 text-center"><h1 class="text-2xl font-bold text-ink">Page not found</h1><p class="mt-2 text-sm text-ink-soft">The page you're looking for doesn't exist.</p><a href="/" class="mt-4 inline-block rounded-xl bg-brand-500 px-4 py-2.5 text-sm font-semibold text-white">Back home</a></div>`,
       }));
     }
