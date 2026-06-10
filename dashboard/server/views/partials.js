@@ -129,7 +129,7 @@ function activityTable(purchases, opts = {}) {
     <td class="px-3 py-3.5">${savingsBadge(p.savingsCents, p.status !== "approved")}</td>
     <td class="px-3 py-3.5 text-sm text-ink-faint">${relativeDate(p.date)}</td>
     <td class="px-5 py-3.5 text-right">
-      <a href="${p.status === "approved" ? "/purchases" : "/review?id=" + encodeURIComponent(p.id)}" class="inline-flex h-8 w-8 items-center justify-center rounded-lg text-ink-faint hover:bg-white/70 hover:text-ink" aria-label="View purchase"><i data-lucide="chevron-right" class="h-4 w-4"></i></a>
+      <a href="/review?id=${encodeURIComponent(p.id)}" class="inline-flex h-8 w-8 items-center justify-center rounded-lg text-ink-faint hover:bg-white/70 hover:text-ink" aria-label="View purchase"><i data-lucide="chevron-right" class="h-4 w-4"></i></a>
     </td>
   </tr>`).join("");
 

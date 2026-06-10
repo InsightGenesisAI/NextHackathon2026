@@ -91,32 +91,37 @@ function redirect(res, location, cookie) {
 
 const SCRIPT_TAG = '<script src="/app.js"></script>';
 
+// Alerts feeding the notification bell — flagged/review purchases.
+function alertsForUser(user) {
+  if (!user || !user.stripeConnected) return [];
+  return store.getRecentPurchasesForUser(user, 100).filter((p) => p.status !== "approved");
+}
+
 // ── Page routing ──
 function renderPage(pathname, user) {
+  const alerts = alertsForUser(user);
+  const L = (opts) => layout({ ...opts, user, alerts, extraScript: SCRIPT_TAG });
   switch (pathname) {
     case "/":
-      return layout({ title: "AgentCFO — Your AI Finance Assistant", pathname, user, extraScript: SCRIPT_TAG,
+      return L({ title: "AgentCFO — Your AI Finance Assistant", pathname,
         body: pages.homePage({ summary: store.getDashboardSummaryForUser(user), purchases: store.getRecentPurchasesForUser(user), review: mockReview, user }) });
     case "/purchases":
-      return layout({ title: "Purchases — AgentCFO", pathname, user, extraScript: SCRIPT_TAG,
+      return L({ title: "Purchases — AgentCFO", pathname,
         body: pages.purchasesPage({ purchases: store.getRecentPurchasesForUser(user, 100), user }) });
     case "/savings":
-      return layout({ title: "Savings — AgentCFO", pathname, user, extraScript: SCRIPT_TAG,
+      return L({ title: "Savings — AgentCFO", pathname,
         body: pages.savingsPage({ purchases: store.getRecentPurchasesForUser(user), summary: store.getDashboardSummaryForUser(user), user }) });
     case "/insights":
-      return layout({ title: "Financial Health — AgentCFO", pathname, user, extraScript: SCRIPT_TAG,
+      return L({ title: "Financial Health — AgentCFO", pathname,
         body: pages.insightsPage({ health: store.getFinancialHealthForUser(user), user }) });
     case "/alerts":
-      return layout({ title: "Alerts — AgentCFO", pathname, user, extraScript: SCRIPT_TAG,
-        body: pages.alertsPage({ purchases: store.getRecentPurchasesForUser(user), user }) });
-    case "/todo":
-      return layout({ title: "To Do — AgentCFO", pathname, user, extraScript: SCRIPT_TAG,
-        body: pages.todoPage({ ...store.getActionsForUser(user), user }) });
+      return L({ title: "Alerts — AgentCFO", pathname,
+        body: pages.alertsPage({ purchases: store.getRecentPurchasesForUser(user, 100), actions: store.getActionsForUser(user), user }) });
     case "/financials":
-      return layout({ title: "Financials — AgentCFO", pathname, user, extraScript: SCRIPT_TAG,
+      return L({ title: "Financials — AgentCFO", pathname,
         body: pages.financialsPage({ financials: store.getFinancialsForUser(user), user }) });
     case "/settings":
-      return layout({ title: "Settings — AgentCFO", pathname, user, extraScript: SCRIPT_TAG,
+      return L({ title: "Settings — AgentCFO", pathname,
         body: pages.settingsPage({ user }) });
     default:
       return null;
@@ -189,7 +194,7 @@ function serveClientScript(res) {
   res.end(CLIENT_JS);
 }
 
-const PROTECTED_PAGES = ["/", "/purchases", "/savings", "/insights", "/alerts", "/todo", "/review", "/settings", "/financials", "/taxes"];
+const PROTECTED_PAGES = ["/purchases", "/savings", "/insights", "/alerts", "/review", "/settings", "/financials", "/overview"];
 
 // ── Auth + onboarding routes. Returns true if it handled the request. ──
 async function handleAuth(req, res, pathname) {
@@ -200,6 +205,10 @@ async function handleAuth(req, res, pathname) {
   }
   if (req.method === "GET" && pathname === "/signup") {
     sendHtml(res, 200, authViews.signupPage());
+    return true;
+  }
+  if (req.method === "GET" && pathname === "/extension") {
+    sendHtml(res, 200, authViews.extensionPage());
     return true;
   }
   if (req.method === "GET" && pathname === "/logout") {
@@ -246,8 +255,8 @@ async function handleAuth(req, res, pathname) {
     return true;
   }
 
-  // Streamed AI tax recommendations (full Exa+AI estimate) for the Taxes page.
-  if (req.method === "GET" && pathname === "/taxes/recommendations") {
+  // Streamed AI money-saving recommendations for the Money Review page.
+  if (req.method === "GET" && (pathname === "/overview/recommendations" || pathname === "/taxes/recommendations")) {
     const user = auth.userFromRequest(req);
     if (!user) { sendJson(res, 401, { error: "Not signed in" }); return true; }
     const financials = store.getFinancialsForUser(user);
@@ -257,8 +266,28 @@ async function handleAuth(req, res, pathname) {
     sendJson(res, 200, {
       source: estimate.source,
       jurisdictionLabel: estimate.jurisdictionLabel,
+      totalTaxCents: estimate.totalTaxCents,
+      effectiveRatePct: estimate.effectiveRatePct,
       efficiencyTips: estimate.efficiencyTips || [],
       sources: estimate.sources || [],
+    });
+    return true;
+  }
+
+  // Run the full APE audit for one purchase (JSON) — powers the review loader.
+  if (req.method === "GET" && pathname === "/review/run") {
+    const user = auth.userFromRequest(req);
+    if (!user) { sendJson(res, 401, { error: "Not signed in" }); return true; }
+    const id = new URL(req.url, "http://x").searchParams.get("id");
+    const purchase = (id && store.getPurchaseForUser(user, id)) || null;
+    if (!purchase) { sendJson(res, 404, { error: "Purchase not found" }); return true; }
+    const result = await audit.auditPurchase(purchase, store.getFinancialHealthForUser(user));
+    sendJson(res, 200, {
+      purchase,
+      verdict: result.verdict,
+      signals: result.signals,
+      market: { mode: result.market.mode, sources: (result.market.sources || []).slice(0, 3) },
+      timeline: result.timeline,
     });
     return true;
   }
@@ -394,40 +423,42 @@ async function handler(req, res) {
     if (req.method === "GET") {
       const user = auth.userFromRequest(req);
 
+      // Landing page: signed-out visitors to "/" get the public starter page.
+      if (pathname === "/" && !user) {
+        return sendHtml(res, 200, authViews.landingPage());
+      }
+
       // Gate the dashboard: signed-out users go to login; signed-in users
       // who haven't finished onboarding go to the wizard.
-      if (PROTECTED_PAGES.includes(pathname)) {
+      if (pathname === "/" || PROTECTED_PAGES.includes(pathname)) {
         if (!user) return redirect(res, "/login");
         if (!user.profileComplete) return redirect(res, "/onboarding");
       }
 
-      // Taxes page: render the financial breakdown instantly (heuristic base),
-      // then stream AI recommendations in via /taxes/recommendations.
-      if (pathname === "/taxes") {
+      const alerts = alertsForUser(user);
+
+      // Money Review (holistic): render instantly, stream AI recommendations.
+      if (pathname === "/overview") {
         const financials = store.getFinancialsForUser(user);
         const taxProfile = store.getTaxProfileForUser(user);
         const base = taxProfile ? tax.baseEstimate(taxProfile, financials) : null;
         return sendHtml(res, 200, layout({
-          title: "Taxes — AgentCFO", pathname, user, extraScript: SCRIPT_TAG,
-          body: pages.taxesPage({ estimate: base, financials, user, pending: !!base }),
+          title: "Money Review — AgentCFO", pathname, user, alerts, extraScript: SCRIPT_TAG,
+          body: pages.overviewPage({ financials, taxBase: base, health: store.getFinancialHealthForUser(user), purchases: store.getRecentPurchasesForUser(user, 100), user }),
         }));
       }
 
       // Review page runs a real purchase through the APE audit pipeline.
+      // Renders a loading shell instantly; the audit streams in via fetch.
       if (pathname === "/review") {
         const id = url.searchParams.get("id");
-        const purchases = store.getRecentPurchasesForUser(user, 50);
-        // Default to the first flagged/review purchase if no id is given.
+        const purchases = store.getRecentPurchasesForUser(user, 100);
         const purchase = (id && store.getPurchaseForUser(user, id)) ||
           purchases.find((p) => p.status === "flagged" || p.status === "review") ||
           purchases[0] || null;
-        let result = null;
-        if (purchase) {
-          result = await audit.auditPurchase(purchase, store.getFinancialHealthForUser(user));
-        }
         return sendHtml(res, 200, layout({
-          title: "Purchase Review — AgentCFO", pathname, user, extraScript: SCRIPT_TAG,
-          body: pages.reviewPage({ purchase, audit: result, user }),
+          title: "Purchase Review — AgentCFO", pathname, user, alerts, extraScript: SCRIPT_TAG,
+          body: pages.reviewPage({ purchase, audit: null, user, pending: !!purchase }),
         }));
       }
 
@@ -436,7 +467,7 @@ async function handler(req, res) {
 
       // 404 page
       return sendHtml(res, 404, layout({
-        title: "Not found — AgentCFO", pathname, user,
+        title: "Not found — AgentCFO", pathname, user, alerts,
         body: `<div class="py-20 text-center"><h1 class="text-2xl font-bold text-ink">Page not found</h1><p class="mt-2 text-sm text-ink-soft">The page you're looking for doesn't exist.</p><a href="/" class="mt-4 inline-block rounded-xl bg-brand-500 px-4 py-2.5 text-sm font-semibold text-white">Back home</a></div>`,
       }));
     }

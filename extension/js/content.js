@@ -45,3 +45,16 @@
 
   SpokeExtension.attachMutationObservers(onCheckoutButtonFound);
 })();
+
+// Dashboard detection marker — lets the AgentCFO dashboard show Protection ON.
+(function () {
+  try {
+    document.documentElement.setAttribute("data-ape-extension", "active");
+    if (!document.getElementById("ape-extension-marker")) {
+      var m = document.createElement("div");
+      m.id = "ape-extension-marker";
+      m.style.display = "none";
+      (document.body || document.documentElement).appendChild(m);
+    }
+  } catch (e) {}
+})();

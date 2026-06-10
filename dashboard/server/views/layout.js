@@ -4,11 +4,10 @@ const NAV = [
   { href: "/", label: "Home", icon: "home" },
   { href: "/purchases", label: "Purchases", icon: "shopping-bag" },
   { href: "/financials", label: "Financials", icon: "bar-chart-3" },
-  { href: "/taxes", label: "Taxes", icon: "landmark" },
+  { href: "/overview", label: "Money Review", icon: "compass" },
   { href: "/savings", label: "Savings", icon: "piggy-bank" },
   { href: "/insights", label: "Insights", icon: "lightbulb" },
   { href: "/alerts", label: "Alerts", icon: "bell" },
-  { href: "/todo", label: "To Do", icon: "check-square" },
   { href: "/settings", label: "Settings", icon: "settings" },
 ];
 
@@ -32,21 +31,56 @@ function sidebar(pathname) {
       <span class="text-lg font-bold tracking-tight text-ink">AgentCFO</span>
     </a>
     <nav class="flex flex-1 flex-col gap-1">${links}</nav>
-    <div class="mt-4 rounded-2xl border border-white/60 bg-gradient-to-br from-brand-100/80 to-white/40 p-4 backdrop-blur">
-      <p class="flex items-center gap-1.5 text-sm font-semibold text-brand-800"><i data-lucide="leaf" class="h-4 w-4"></i>Protection is ON</p>
-      <p class="mt-1 text-xs leading-relaxed text-brand-700">AgentCFO is watching your purchases in the background.</p>
+    <div id="protection-card" class="mt-4 rounded-2xl border border-white/60 bg-gradient-to-br from-amber-100/70 to-white/40 p-4 backdrop-blur">
+      <p id="protection-card-title" class="flex items-center gap-1.5 text-sm font-semibold text-amber-800"><i data-lucide="shield-question" class="h-4 w-4"></i>Checking protection…</p>
+      <p id="protection-card-body" class="mt-1 text-xs leading-relaxed text-amber-700">Looking for the AgentCFO browser extension.</p>
+      <a id="protection-card-cta" href="/extension" class="mt-2 hidden text-xs font-semibold text-brand-700 hover:text-brand-800">Get the extension →</a>
     </div>
   </aside>`;
 }
 
-function topnav(user) {
-  const account = user
-    ? `<div class="hidden items-center gap-2 sm:flex">
-         <span class="text-sm font-medium text-ink-soft">${esc(user.company || user.name || "")}</span>
-         <a href="/logout" class="flex h-9 items-center gap-1.5 rounded-xl px-2.5 text-sm font-medium text-ink-soft hover:bg-gray-50" title="Sign out"><i data-lucide="log-out" class="h-4 w-4"></i>Sign out</a>
-       </div>`
-    : "";
+function topnav(user, alerts = []) {
   const initial = user && user.name ? esc(user.name.trim()[0].toUpperCase()) : "A";
+  const company = user ? esc(user.company || user.name || "") : "";
+  const email = user ? esc(user.email || "") : "";
+
+  // Notification dropdown content from flagged/review purchases.
+  const alertCount = alerts.length;
+  const alertItems = alertCount
+    ? alerts.slice(0, 5).map((a) => `<a href="/review?id=${esc(a.id)}" class="flex items-start gap-3 rounded-xl px-3 py-2.5 hover:bg-white/70">
+        <span class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${a.status === "flagged" ? "bg-rose-50 text-rose-600" : "bg-amber-50 text-amber-600"}"><i data-lucide="alert-circle" class="h-4 w-4"></i></span>
+        <span class="min-w-0"><span class="block truncate text-sm font-semibold text-ink">${esc(a.item)}</span><span class="block text-xs text-ink-faint">${esc(a.vendor)} · ${a.status === "flagged" ? "Action needed" : "Review"}</span></span>
+      </a>`).join("")
+    : `<p class="px-3 py-6 text-center text-sm text-ink-faint">You're all caught up 🎉</p>`;
+
+  const bell = user
+    ? `<div class="relative">
+        <button onclick="window.__toggleNotif&&window.__toggleNotif(event)" aria-label="Notifications" class="relative flex h-9 w-9 items-center justify-center rounded-xl text-ink-soft hover:bg-white/60">
+          <i data-lucide="bell" class="h-5 w-5"></i>
+          ${alertCount ? `<span class="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white">${alertCount}</span>` : ""}
+        </button>
+        <div id="notif-panel" class="absolute right-0 top-12 z-40 hidden w-80 overflow-hidden rounded-2xl border border-white/70 bg-white/90 shadow-pop backdrop-blur-xl">
+          <div class="flex items-center justify-between border-b border-white/60 px-4 py-3"><p class="text-sm font-semibold text-ink">Notifications</p><span class="rounded-full bg-brand-50 px-2 py-0.5 text-xs font-semibold text-brand-700">${alertCount} active</span></div>
+          <div class="max-h-80 overflow-y-auto p-1.5">${alertItems}</div>
+          <a href="/alerts" class="block border-t border-white/60 px-4 py-2.5 text-center text-sm font-semibold text-brand-700 hover:bg-white/70">View all alerts</a>
+        </div>
+      </div>`
+    : "";
+
+  const avatar = user
+    ? `<div class="relative">
+        <button onclick="window.__toggleProfile&&window.__toggleProfile(event)" aria-label="Account menu" class="glass-sheen flex h-9 w-9 items-center justify-center rounded-full bg-brand-500 text-sm font-semibold text-white">${initial}</button>
+        <div id="profile-panel" class="absolute right-0 top-12 z-40 hidden w-64 overflow-hidden rounded-2xl border border-white/70 bg-white/90 shadow-pop backdrop-blur-xl">
+          <div class="border-b border-white/60 px-4 py-3"><p class="truncate text-sm font-semibold text-ink">${esc(user.name || "Account")}</p><p class="truncate text-xs text-ink-faint">${email}</p>${company ? `<p class="mt-1 inline-flex items-center gap-1 rounded-full bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-700"><i data-lucide="building-2" class="h-3 w-3"></i>${company}</p>` : ""}</div>
+          <nav class="p-1.5">
+            <a href="/settings" class="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm text-ink-soft hover:bg-white/70"><i data-lucide="settings" class="h-4 w-4"></i>Settings</a>
+            <a href="/overview" class="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm text-ink-soft hover:bg-white/70"><i data-lucide="compass" class="h-4 w-4"></i>Money review</a>
+            <a href="/logout" class="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm text-rose-600 hover:bg-rose-50"><i data-lucide="log-out" class="h-4 w-4"></i>Sign out</a>
+          </nav>
+        </div>
+      </div>`
+    : `<div class="glass-sheen flex h-9 w-9 items-center justify-center rounded-full bg-brand-500 text-sm font-semibold text-white">${initial}</div>`;
+
   return `<header class="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-white/50 bg-white/45 px-4 backdrop-blur-xl sm:px-6 lg:px-8">
     <a href="/" class="flex items-center gap-2 lg:hidden"><span class="text-base font-bold text-ink">AgentCFO</span></a>
     <div class="hidden flex-1 items-center sm:flex">
@@ -56,20 +90,16 @@ function topnav(user) {
       </div>
     </div>
     <div class="ml-auto flex items-center gap-3">
-      ${account}
-      <span class="hidden items-center gap-1.5 rounded-full border border-white/60 bg-brand-50/80 px-3 py-1.5 text-xs font-semibold text-brand-700 backdrop-blur sm:flex">
-        <i data-lucide="shield-check" class="h-3.5 w-3.5"></i>Protection ON
+      <span id="protection-pill" class="hidden items-center gap-1.5 rounded-full border border-white/60 bg-brand-50/80 px-3 py-1.5 text-xs font-semibold text-brand-700 backdrop-blur sm:flex" title="Checking for the AgentCFO browser extension…">
+        <i data-lucide="shield-check" class="h-3.5 w-3.5"></i><span id="protection-label">Protection</span>
       </span>
-      <button aria-label="Alerts" class="relative flex h-9 w-9 items-center justify-center rounded-xl text-ink-soft hover:bg-white/60">
-        <i data-lucide="bell" class="h-5 w-5"></i>
-        <span class="absolute right-2 top-2 h-2 w-2 rounded-full bg-brand-500"></span>
-      </button>
-      <div class="glass-sheen flex h-9 w-9 items-center justify-center rounded-full bg-brand-500 text-sm font-semibold text-white">${initial}</div>
+      ${bell}
+      ${avatar}
     </div>
   </header>`;
 }
 
-function layout({ title, pathname, body, extraScript = "", user = null }) {
+function layout({ title, pathname, body, extraScript = "", user = null, alerts = [] }) {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -161,7 +191,7 @@ function layout({ title, pathname, body, extraScript = "", user = null }) {
   <div class="flex min-h-screen bg-canvas">
     ${sidebar(pathname)}
     <div class="flex min-w-0 flex-1 flex-col">
-      ${topnav(user)}
+      ${topnav(user, alerts)}
       <main class="flex-1 px-4 py-6 sm:px-6 lg:px-8">
         <div class="mx-auto w-full max-w-6xl">${body}</div>
       </main>

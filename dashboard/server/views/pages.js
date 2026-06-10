@@ -205,36 +205,29 @@ function insightsPage({ health, user }) {
   return P.pageHeader("Your Financial Health", "Real-time snapshot of your business.") + body;
 }
 
-// ── Alerts ──
-function alertsPage({ purchases, user }) {
+// ── Alerts (merged: flagged purchases + tasks + renewals) ──
+function alertsPage({ purchases, actions, user }) {
   const connected = user && user.stripeConnected;
   if (!connected) {
-    return P.pageHeader("Alerts", "Purchases that could use a quick look.") +
-      P.card(P.emptyState("No alerts yet", "Connect Stripe so AgentCFO can flag purchases that need a look.", "/alerts"));
+    return P.pageHeader("Alerts", "Purchases and tasks that need a look.") +
+      P.card(P.emptyState("No alerts yet", "Connect Stripe so AgentCFO can flag purchases and suggest actions.", "/alerts"));
   }
+  const { todos = [], renewals = [], recommended = [] } = actions || {};
   const alerts = purchases.filter((p) => p.status !== "approved");
-  const body = alerts.length === 0
-    ? P.card(`<div class="flex flex-col items-center px-5 py-12 text-center">
+
+  const flaggedBlock = alerts.length === 0
+    ? P.card(`<div class="flex flex-col items-center px-5 py-10 text-center">
         <span class="flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-50 text-brand-600"><i data-lucide="bell" class="h-6 w-6"></i></span>
-        <p class="mt-3 text-sm font-semibold text-ink">You're all caught up</p>
-        <p class="mt-1 text-sm text-ink-faint">No purchases need your attention right now.</p>
+        <p class="mt-3 text-sm font-semibold text-ink">No purchases need attention</p>
+        <p class="mt-1 text-sm text-ink-faint">AgentCFO will flag anything risky here.</p>
       </div>`)
-    : `<ul class="space-y-3">${alerts.map((p) => `<li class="flex items-center gap-3 rounded-2xl border border-gray-100 bg-white p-4 shadow-soft">
+    : `<ul class="space-y-3">${alerts.map((p) => `<li class="glass flex items-center gap-3 rounded-2xl p-4 shadow-soft">
         <span class="flex h-10 w-10 items-center justify-center rounded-xl ${p.status === "flagged" ? "bg-rose-50 text-rose-600" : "bg-amber-50 text-amber-600"}"><i data-lucide="alert-circle" class="h-5 w-5"></i></span>
         <div class="min-w-0 flex-1"><p class="text-sm font-semibold text-ink">${esc(p.item)}</p><p class="text-xs text-ink-faint">${esc(p.vendor)} · ${moneyPerMonth(p.priceCents, p.billing)} · ${relativeDate(p.date)}</p></div>
         <a href="/review?id=${esc(p.id)}" class="inline-flex items-center gap-1.5 rounded-xl bg-brand-500 px-3.5 py-2 text-sm font-semibold text-white hover:bg-brand-600">Review<i data-lucide="arrow-right" class="h-4 w-4"></i></a>
       </li>`).join("")}</ul>`;
-  return P.pageHeader("Alerts", "Purchases that could use a quick look.") + body;
-}
 
-// ── To Do ──
-function todoPage({ todos, renewals, recommended, user }) {
-  const connected = user && user.stripeConnected;
-  if (!connected) {
-    return P.pageHeader("What's Next?", "Here's what AgentCFO recommends.") +
-      P.card(P.emptyState("Nothing to do yet", "Connect Stripe and AgentCFO will suggest tasks, renewals, and actions.", "/todo"));
-  }
-  const todoItems = todos.map((t) => `<li data-id="${t.id}" class="todo-item flex items-start gap-3 rounded-2xl border border-gray-100 bg-white p-4 shadow-soft transition-opacity">
+  const todoItems = todos.length ? todos.map((t) => `<li data-id="${t.id}" class="todo-item glass flex items-start gap-3 rounded-2xl p-4 shadow-soft transition-opacity">
     <button onclick="window.__toggleTodo&&window.__toggleTodo(this)" aria-label="Toggle done" class="todo-check mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-gray-300 transition-colors hover:border-brand-400">
       <svg viewBox="0 0 12 12" class="h-3 w-3 hidden" fill="none" stroke="currentColor" stroke-width="2"><path d="M2.5 6.5l2.5 2.5 4.5-5" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </button>
@@ -243,25 +236,25 @@ function todoPage({ todos, renewals, recommended, user }) {
       <p class="mt-0.5 text-sm text-ink-soft">${esc(t.detail)}</p>
       ${t.due ? `<p class="mt-1 text-xs text-ink-faint">Due ${dateLabel(t.due)}</p>` : ""}
     </div>
-    <button class="mt-0.5 flex h-8 w-8 items-center justify-center rounded-lg text-ink-faint hover:bg-gray-50 hover:text-ink" aria-label="Take action"><i data-lucide="arrow-right" class="h-4 w-4"></i></button>
-  </li>`).join("");
+  </li>`).join("") : `<li class="text-sm text-ink-faint">No open tasks.</li>`;
 
-  const recItems = recommended.map((r) => `<div class="rounded-2xl border border-gray-100 bg-white p-4 shadow-soft">
+  const recItems = recommended.map((r) => `<div class="glass rounded-2xl p-4 shadow-soft">
     <div class="flex items-center justify-between gap-2"><p class="text-sm font-semibold text-ink">${esc(r.title)}</p>${P.priorityBadge(r.priority)}</div>
     <p class="mt-1 text-sm text-ink-soft">${esc(r.detail)}</p>
   </div>`).join("");
 
   const renewalItems = renewals.map((r) => {
     const days = daysUntil(r.renewsOn); const soon = days <= 7;
-    return `<li class="flex items-center gap-3 rounded-2xl border border-gray-100 bg-white p-4 shadow-soft">
-      <span class="flex h-10 w-10 items-center justify-center rounded-xl bg-canvas text-lg">${esc(r.icon || "🔁")}</span>
+    return `<li class="glass flex items-center gap-3 rounded-2xl p-4 shadow-soft">
+      <span class="flex h-10 w-10 items-center justify-center rounded-xl bg-white/70 text-lg">${esc(r.icon || "🔁")}</span>
       <div class="min-w-0 flex-1"><p class="text-sm font-semibold text-ink">${esc(r.name)}</p><p class="text-xs text-ink-faint">${moneyPerMonth(r.priceCents, r.billing)} · renews ${dateLabel(r.renewsOn)}</p></div>
       <span class="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ${soon ? "bg-amber-50 text-amber-700" : "bg-gray-100 text-ink-soft"}"><i data-lucide="calendar-clock" class="h-3.5 w-3.5"></i>${days <= 0 ? "Due now" : `${days} days`}</span>
     </li>`;
   }).join("");
 
-  return P.pageHeader("What's Next?", "Here's what AgentCFO recommends.") + `<div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
+  return P.pageHeader("Alerts", "Purchases to review, tasks, and upcoming renewals — all in one place.") + `<div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
     <div class="space-y-6 lg:col-span-2">
+      <section><h2 class="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-ink-faint"><i data-lucide="shield-alert" class="h-4 w-4"></i>Needs your review<span class="rounded-full bg-rose-50 px-1.5 text-xs font-bold text-rose-600">${alerts.length}</span></h2>${flaggedBlock}</section>
       <section><h2 class="mb-3 text-sm font-semibold uppercase tracking-wide text-ink-faint">To do</h2><ul class="space-y-3">${todoItems}</ul></section>
       <section><h2 class="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-ink-faint"><i data-lucide="sparkles" class="h-4 w-4"></i>Recommended actions</h2><div class="grid grid-cols-1 gap-3 sm:grid-cols-2">${recItems}</div></section>
     </div>
@@ -269,110 +262,77 @@ function todoPage({ todos, renewals, recommended, user }) {
   </div>`;
 }
 
-// ── Review (live APE audit) ──
-// Renders the real verdict from the signature audit pipeline for one purchase.
-function reviewPage({ purchase, audit, user }) {
+// ── Review (live APE audit) — streaming loading shell ──
+// Renders instantly with a loading pipeline; the client fetches /review/run and
+// injects the verdict so the page never looks frozen.
+function reviewPage({ purchase, user }) {
   const connected = user && user.stripeConnected;
   if (!connected) {
     return P.pageHeader("Purchase review", "Run a purchase through AgentCFO's audit.") +
       P.connectStripeBanner("/alerts");
   }
-  if (!purchase || !audit) {
+  if (!purchase) {
     return P.pageHeader("Purchase review", "Run a purchase through AgentCFO's audit.") +
       P.card(P.emptyState("Nothing to review", "Pick a flagged purchase from Alerts to run the audit.", "/alerts"));
   }
 
-  const v = audit.verdict || {};
-  const signals = audit.signals || {};
-  const market = audit.market || {};
-  const flagged = !!v.is_flagged;
-  const premium = signals.market_premium_percent || 0;
-  const dups = signals.stack_duplicates || [];
-  const violations = signals.policy_violations || [];
+  const isApproved = purchase.status === "approved";
 
-  const STEP_ICON = {
-    done: `<span class="flex h-6 w-6 items-center justify-center rounded-full bg-brand-500 text-white"><i data-lucide="check" class="h-3.5 w-3.5"></i></span>`,
-    running: `<span class="flex h-6 w-6 items-center justify-center rounded-full bg-brand-100 text-brand-600"><i data-lucide="loader" class="h-3.5 w-3.5"></i></span>`,
-    failed: `<span class="flex h-6 w-6 items-center justify-center rounded-full bg-rose-100 text-rose-600"><i data-lucide="flag" class="h-3.5 w-3.5"></i></span>`,
-    pending: `<span class="flex h-6 w-6 items-center justify-center rounded-full bg-gray-100 text-ink-faint"><i data-lucide="circle" class="h-2.5 w-2.5"></i></span>`,
-  };
-  const tl = audit.timeline || { steps: [], auditLog: [] };
-  const steps = tl.steps.map((s, i) => `<li class="flex gap-3">
-    <div class="flex flex-col items-center">${STEP_ICON[s.status] || STEP_ICON.pending}${i < tl.steps.length - 1 ? `<span class="my-1 w-px flex-1 bg-gray-100"></span>` : ""}</div>
-    <div class="flex-1 pb-3"><div class="flex items-center justify-between gap-2"><p class="text-sm font-semibold text-ink"><span class="text-brand-600">${esc(s.actor)}</span> · ${esc(s.label)}</p>${typeof s.ms === "number" ? `<span class="shrink-0 text-xs text-ink-faint">${s.ms}ms</span>` : ""}</div>${s.result ? `<p class="mt-0.5 text-sm text-ink-soft">${esc(s.result)}</p>` : ""}</div>
+  // Animated pipeline stages shown while the audit runs.
+  const stages = [
+    ["search", "Search Strategist", "Building market query"],
+    ["globe", "Exa", "Scanning market benchmarks"],
+    ["building-2", "CFO Auditor", "Checking budget, policy & stack"],
+    ["wallet", "Stripe", "Verifying financial health"],
+  ];
+  const stageList = stages.map((s, i) => `<li class="review-stage flex items-center gap-3 rounded-xl border border-white/60 bg-white/60 px-4 py-3" data-stage="${i}">
+    <span class="stage-dot flex h-7 w-7 items-center justify-center rounded-full bg-gray-100 text-ink-faint"><i data-lucide="${s[0]}" class="h-4 w-4"></i></span>
+    <div class="flex-1"><p class="text-sm font-semibold text-ink">${esc(s[1])}</p><p class="text-xs text-ink-faint">${esc(s[2])}</p></div>
+    <span class="stage-status text-xs font-medium text-ink-faint">Queued</span>
   </li>`).join("");
 
-  const auditEntries = tl.auditLog.map((e, i) => `<li class="flex gap-3 rounded-xl bg-canvas p-3"><span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-500 text-xs font-semibold text-white">${i + 1}</span><p class="text-sm text-ink">${esc(e.step)}</p></li>`).join("");
-
-  // Three intelligence capsules (Market / Financial / Company), like the extension.
-  const analysisLines = (v.concise_analysis || "").split("\n").filter((l) => l.trim());
-  const capsule = (icon, label, body, tone) => `<div class="rounded-2xl border ${tone} p-4">
-    <div class="flex items-center gap-2"><i data-lucide="${icon}" class="h-4 w-4"></i><p class="text-xs font-semibold uppercase tracking-wide">${esc(label)}</p></div>
-    <p class="mt-1.5 text-sm">${esc(body)}</p>
-  </div>`;
-
-  const marketBody = premium > 0 ? `Pricing is about ${premium}% above benchmark (${market.mode || "scan"}).` : "Pricing looks within normal market range.";
-  const finBody = signals.department_projected_utilization_percent > 100
-    ? `This would push the department budget to ${Math.round(signals.department_projected_utilization_percent)}% of its quarterly cap.`
-    : `Cash runway ~${signals.cash_runway_months} months; budget impact manageable.`;
-  const companyBody = dups.length ? `${dups[0].unused_seats} unused ${dups[0].existing_tool} licenses already available in the same category.` : "No redundant tooling found in the Stack Registry.";
-
-  const sourceLinks = (market.sources || []).filter((s) => s.url).slice(0, 3)
-    .map((s) => `<a href="${esc(s.url)}" target="_blank" rel="noreferrer" class="underline hover:text-ink-soft">${esc(s.title || s.url)}</a>`).join(" · ");
-
-  const statusBanner = flagged
-    ? `<div class="rounded-2xl border border-rose-100 bg-rose-50 p-5"><div class="flex items-start gap-3"><span class="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-rose-600 shadow-soft"><i data-lucide="shield-alert" class="h-5 w-5"></i></span><div class="flex-1"><p class="text-xs font-semibold uppercase tracking-wide text-rose-700">Flagged by AgentCFO</p><h3 class="mt-0.5 text-base font-semibold text-ink">${esc(purchase.item)}</h3><p class="text-sm text-ink-soft">${esc(purchase.vendor)} · ${moneyPerMonth(purchase.priceCents, purchase.billing)}</p></div></div></div>`
-    : `<div class="rounded-2xl border border-brand-100 bg-brand-50 p-5"><div class="flex items-start gap-3"><span class="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-brand-600 shadow-soft"><i data-lucide="shield-check" class="h-5 w-5"></i></span><div class="flex-1"><p class="text-xs font-semibold uppercase tracking-wide text-brand-700">Cleared by AgentCFO</p><h3 class="mt-0.5 text-base font-semibold text-ink">${esc(purchase.item)}</h3><p class="text-sm text-ink-soft">${esc(purchase.vendor)} · ${moneyPerMonth(purchase.priceCents, purchase.billing)}</p></div></div></div>`;
-
-  const violationList = violations.length
-    ? `<div class="rounded-2xl border border-amber-100 bg-amber-50/60 p-4"><p class="text-xs font-semibold uppercase tracking-wide text-amber-700">Policy violations</p><ul class="mt-2 space-y-1.5">${violations.map((vi) => `<li class="text-sm text-ink"><span class="font-medium">${esc(vi.rule_id)}:</span> ${esc(vi.detail || vi.description)}</li>`).join("")}</ul></div>`
-    : "";
-
-  const question = v.missing_context_question || "Provide business justification for this purchase.";
-
-  const reviewCard = `<div class="space-y-5">
-    ${statusBanner}
-    <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
-      ${capsule("trending-up", "Market (Exa)", marketBody, premium >= 10 ? "border-rose-100 bg-rose-50/50 text-rose-800" : "border-gray-100 bg-white text-ink-soft")}
-      ${capsule("wallet", "Financial (Stripe)", finBody, "border-gray-100 bg-white text-ink-soft")}
-      ${capsule("building-2", "Company (DNA)", companyBody, dups.length ? "border-amber-100 bg-amber-50/50 text-amber-800" : "border-gray-100 bg-white text-ink-soft")}
-    </div>
-    ${violationList}
-    <div class="rounded-2xl border border-gray-100 bg-white p-5 shadow-card">
-      <p class="text-xs font-semibold uppercase tracking-wide text-ink-faint">AgentCFO analysis</p>
-      <div class="mt-2 space-y-1.5">${analysisLines.map((l, i) => `<p class="text-sm ${i === 0 ? "font-semibold text-ink" : "text-ink-soft"}">${esc(l)}</p>`).join("")}</div>
-      ${sourceLinks ? `<p class="mt-3 text-xs text-ink-faint"><span class="font-semibold">Sources:</span> ${sourceLinks}</p>` : ""}
-    </div>
-    <div id="review-actions" class="rounded-2xl border border-gray-100 bg-white p-5 shadow-card" data-id="${esc(purchase.id)}">
-      <label for="why" class="text-sm font-medium text-ink">${esc(question)}</label>
-      <textarea id="why" rows="3" placeholder="Explain the business need (e.g. 'Load testing for the Q3 launch — temporary capacity')." class="mt-2 w-full resize-none rounded-xl border border-gray-200 bg-canvas px-3.5 py-3 text-sm text-ink outline-none transition-colors placeholder:text-ink-faint focus:border-brand-300 focus:bg-white"></textarea>
-      <p id="review-msg" class="mt-3 hidden rounded-xl px-3.5 py-2.5 text-sm bg-canvas text-ink-soft"></p>
-      <div id="review-trace" class="mt-3 hidden"></div>
-      <div class="mt-4 flex flex-wrap gap-3">
-        <button onclick="window.__reviewResolve&&window.__reviewResolve('decline')" class="inline-flex items-center gap-1.5 rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-semibold text-ink-soft transition-colors hover:bg-gray-50"><i data-lucide="x" class="h-4 w-4"></i>Decline & cancel</button>
-        <button onclick="window.__reviewResolve&&window.__reviewResolve('submit')" class="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-brand-500 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-brand-600 sm:flex-none"><i data-lucide="file-text" class="h-4 w-4"></i>Submit justification to CFO</button>
-      </div>
+  const header = `<div class="glass rounded-2xl p-5 shadow-card">
+    <div class="flex items-start gap-3">
+      <span class="flex h-11 w-11 items-center justify-center rounded-xl border border-white/70 bg-white/70 text-xl shadow-soft">${esc(purchase.icon || "🧾")}</span>
+      <div class="flex-1"><p class="text-xs font-semibold uppercase tracking-wide text-ink-faint">${isApproved ? "Approved purchase" : "Under review"}</p><h3 class="mt-0.5 text-base font-semibold text-ink">${esc(purchase.item)}</h3><p class="text-sm text-ink-soft">${esc(purchase.vendor)} · ${moneyPerMonth(purchase.priceCents, purchase.billing)}</p></div>
+      ${P.statusBadge(purchase.status)}
     </div>
   </div>`;
 
-  const action = `<button onclick="window.__openAudit&&window.__openAudit()" class="inline-flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3.5 py-2 text-sm font-semibold text-ink-soft hover:bg-gray-50"><i data-lucide="list-checks" class="h-4 w-4"></i>View audit log</button>`;
+  // For approved purchases, show a calm "cleared" summary instead of the
+  // full intervention flow.
+  const subtitle = isApproved
+    ? "This purchase already cleared AgentCFO — here's the record."
+    : "AgentCFO is auditing this purchase right now.";
 
-  const timeline = P.card(`<div class="px-5 py-4"><h2 class="text-base font-semibold text-ink">How AgentCFO decided</h2><p class="text-sm text-ink-soft">Live trace from the procurement audit pipeline.</p></div><ol class="space-y-1 px-5 pb-5">${steps}</ol>`);
+  const loading = `<div id="review-loading" class="space-y-4">
+    ${header}
+    <div class="glass rounded-2xl p-5 shadow-card">
+      <div class="flex items-center gap-2"><span class="h-4 w-4 rounded-full border-2 border-brand-200 border-t-brand-500 ape-spin"></span><p class="text-sm font-semibold text-ink">Running the procurement audit…</p></div>
+      <ul class="mt-4 space-y-2">${stageList}</ul>
+    </div>
+  </div>`;
+
+  // Result container (filled by client JS from /review/run).
+  const result = `<div id="review-result" class="hidden space-y-5" data-id="${esc(purchase.id)}" data-approved="${isApproved ? "1" : "0"}"></div>`;
+
+  const timeline = `<div id="review-timeline">${P.card(`<div class="px-5 py-4"><h2 class="text-base font-semibold text-ink">How AgentCFO decides</h2><p class="text-sm text-ink-soft">Live trace from the procurement audit pipeline.</p></div><div class="px-5 pb-5"><div class="flex items-center gap-2 text-sm text-ink-faint"><span class="h-3.5 w-3.5 rounded-full border-2 border-brand-200 border-t-brand-500 ape-spin"></span>Waiting for the audit to finish…</div></div>`)}</div>`;
 
   const drawer = `<div id="audit-drawer" class="fixed inset-0 z-50 hidden justify-end">
     <div class="absolute inset-0 bg-ink/20" onclick="window.__closeAudit&&window.__closeAudit()"></div>
     <aside class="thin-scroll relative flex h-full w-full max-w-md flex-col overflow-y-auto bg-white shadow-pop animate-soft-in">
-      <div class="flex items-center justify-between border-b border-gray-100 px-5 py-4">
+      <div class="flex items-center justify-between border-b border-white/60 px-5 py-4">
         <div class="flex items-center gap-2"><span class="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-50 text-brand-600"><i data-lucide="list-checks" class="h-4 w-4"></i></span><div><h3 class="text-sm font-semibold text-ink">Audit log · chain of thought</h3><p class="text-xs text-ink-faint">Each step the auditor took before deciding.</p></div></div>
         <button onclick="window.__closeAudit&&window.__closeAudit()" class="flex h-8 w-8 items-center justify-center rounded-lg text-ink-faint hover:bg-gray-50" aria-label="Close audit log"><i data-lucide="x" class="h-4 w-4"></i></button>
       </div>
-      <ol class="space-y-3 px-5 py-5">${auditEntries}</ol>
+      <ol id="audit-log-list" class="space-y-3 px-5 py-5"></ol>
     </aside>
   </div>`;
 
-  const title = flagged ? "AgentCFO flagged this purchase" : "AgentCFO reviewed this purchase";
-  const subtitle = flagged ? "Here's what the audit found and what it needs from you." : "The audit cleared it — here's the reasoning.";
-  return P.pageHeader(title, subtitle, action) + `<div class="grid grid-cols-1 gap-6 lg:grid-cols-3"><div class="lg:col-span-2">${reviewCard}</div><div class="space-y-6">${timeline}</div></div>${drawer}`;
+  const action = `<button onclick="window.__openAudit&&window.__openAudit()" class="inline-flex items-center gap-1.5 rounded-xl border border-white/70 bg-white/60 px-3.5 py-2 text-sm font-semibold text-ink-soft hover:bg-white/80"><i data-lucide="list-checks" class="h-4 w-4"></i>View audit log</button>`;
+
+  return P.pageHeader("Purchase review", subtitle, action) +
+    `<div class="grid grid-cols-1 gap-6 lg:grid-cols-3"><div class="lg:col-span-2">${loading}${result}</div><div class="space-y-6">${timeline}</div></div>${drawer}`;
 }
 
 // ── Settings (static + client toggles) ──
@@ -537,96 +497,75 @@ function financialsPage({ financials, user }) {
   return P.pageHeader("Financials", "Revenue, expenses, and profitability for the year.") + body;
 }
 
-// ── Taxes ──
-function taxesPage({ estimate, financials, user, pending }) {
+// ── Money Review (holistic) ──
+// A holistic look at the whole company: profitability, tax position, and
+// AI-generated ways to save money — including things Stripe can't see (taxes,
+// vendor consolidation, structural ideas). Renders instantly; AI streams in.
+function overviewPage({ financials, taxBase, health, purchases, user }) {
   const connected = user && user.stripeConnected;
   if (!connected) {
-    return P.pageHeader("Taxes", "Estimated taxes and ways to improve efficiency.") +
-      P.connectStripeBanner("/taxes");
-  }
-  if (!estimate) {
-    return P.pageHeader("Taxes", "Estimated taxes and ways to improve efficiency.") +
-      P.card(P.emptyState("No tax estimate yet", "We couldn't build an estimate right now. Try again shortly.", "/taxes"));
+    return P.pageHeader("Money Review", "A holistic look at your finances and ways to save.") +
+      P.connectStripeBanner("/overview");
   }
 
-  const e = estimate;
-  const sourceBadge = e.source.includes("exa")
-    ? `<span class="inline-flex items-center gap-1 rounded-full bg-brand-50 px-2 py-0.5 text-xs font-semibold text-brand-700"><i data-lucide="sparkles" class="h-3 w-3"></i>Exa + AI estimate</span>`
-    : e.source === "ai"
-    ? `<span class="inline-flex items-center gap-1 rounded-full bg-brand-50 px-2 py-0.5 text-xs font-semibold text-brand-700"><i data-lucide="sparkles" class="h-3 w-3"></i>AI estimate</span>`
-    : `<span class="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-semibold text-ink-soft">Heuristic estimate</span>`;
+  const f = financials || {};
+  const e = taxBase;
+  const flagged = (purchases || []).filter((p) => p.status !== "approved");
+  const potentialSpendSavings = (purchases || []).reduce((s, p) => s + (p.savingsCents || 0), 0);
 
+  // Headline metrics: net profit, est tax, after-tax, identified savings.
   const topMetrics = [
-    P.metricCard({ label: "Taxable Income", value: money(e.taxableIncomeCents), sub: `FY ${e.fiscalYear}`, icon: "file-text", tone: "neutral" }),
-    P.metricCard({ label: "Estimated Tax", value: money(e.totalTaxCents), sub: e.jurisdictionLabel, icon: "landmark", tone: "watch" }),
-    P.metricCard({ label: "Effective Rate", value: `${e.effectiveRatePct}%`, sub: "Blended", icon: "percent", tone: "neutral" }),
-    P.metricCard({ label: "After-Tax Income", value: money(e.afterTaxIncomeCents), sub: "Estimated", icon: "piggy-bank", tone: "good" }),
+    P.metricCard({ label: "Net (pre-tax)", value: money(f.netProfitBeforeTaxCents || 0), sub: `${f.netMarginPct || 0}% margin`, icon: "trending-up", tone: "good" }),
+    P.metricCard({ label: "Est. annual tax", value: e ? money(e.totalTaxCents) : "—", sub: e ? `${e.effectiveRatePct}% effective` : "Estimating…", icon: "landmark", tone: "watch" }),
+    P.metricCard({ label: "After-tax income", value: e ? money(e.afterTaxIncomeCents) : "—", sub: e ? e.jurisdictionLabel : "", icon: "piggy-bank", tone: "good" }),
+    P.metricCard({ label: "Savings identified", value: money(potentialSpendSavings), sub: `${flagged.length} items to review`, icon: "sparkles", tone: "good" }),
   ].join("");
 
-  const componentRows = (e.components || []).map((c) => `<tr class="border-b border-gray-50 last:border-0">
+  // Tax position card (instant, from heuristic base).
+  const componentRows = e ? (e.components || []).map((c) => `<tr class="border-b border-gray-50 last:border-0">
     <td class="px-4 py-2.5 text-sm font-medium text-ink">${esc(c.name)}</td>
     <td class="px-4 py-2.5 text-right text-sm text-ink-soft">${c.ratePct}%</td>
     <td class="px-4 py-2.5 text-right text-sm font-semibold text-ink">${money(c.estTaxCents)}</td>
-  </tr>`).join("");
+  </tr>`).join("") : "";
 
-  const tipsContent = (e.efficiencyTips || []).map((t) => `<div class="rounded-2xl border border-white/70 bg-white p-4 shadow-soft">
-    <div class="flex items-start justify-between gap-3">
-      <div><p class="text-sm font-semibold text-ink">${esc(t.title)}</p><p class="mt-1 text-sm text-ink-soft">${esc(t.detail)}</p></div>
-      ${t.estAnnualSavingCents > 0 ? `<span class="shrink-0 rounded-full bg-brand-50 px-2.5 py-1 text-xs font-semibold text-brand-700">~${money(t.estAnnualSavingCents)}/yr</span>` : ""}
-    </div>
-  </div>`).join("");
+  const taxCard = e ? P.card(P.cardHeader("Tax position", `Estimated for ${e.jurisdictionLabel} · FY ${e.fiscalYear}`) +
+    `<div class="overflow-x-auto px-1 pb-3 pt-3"><table class="w-full"><thead><tr class="border-b border-gray-100 text-xs uppercase tracking-wide text-ink-faint"><th class="px-4 py-2 text-left">Component</th><th class="px-4 py-2 text-right">Rate</th><th class="px-4 py-2 text-right">Est. tax</th></tr></thead><tbody>${componentRows}</tbody></table></div>`) : "";
 
-  // When `pending`, the financials render instantly and the AI recommendations
-  // stream in afterward (the client fetches /taxes/recommendations).
-  const tipsSection = pending
-    ? `<div id="tips-loading" class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-         ${[0, 1, 2, 3].map(() => `<div class="rounded-2xl border border-white/70 bg-white/60 p-4 shadow-soft">
-           <div class="flex items-center gap-2"><span class="h-4 w-4 rounded-full border-2 border-brand-200 border-t-brand-500 ape-spin"></span><span class="text-sm font-medium text-ink-soft">Analyzing with Exa + AI…</span></div>
-           <div class="mt-3 space-y-2"><div class="h-2.5 w-3/4 rounded-full bg-black/5"></div><div class="h-2.5 w-1/2 rounded-full bg-black/5"></div></div>
-         </div>`).join("")}
-       </div>
-       <div id="tips-content" class="hidden grid grid-cols-1 gap-3 sm:grid-cols-2"></div>`
-    : `<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">${tipsContent}</div>`;
+  // Quick wins from Stripe-visible spend (flagged purchases).
+  const quickWins = flagged.slice(0, 4).map((p) => `<a href="/review?id=${esc(p.id)}" class="glass flex items-center gap-3 rounded-2xl p-4 shadow-soft hover:shadow-card">
+    <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-white/70 text-lg">${esc(p.icon || "🧾")}</span>
+    <div class="min-w-0 flex-1"><p class="truncate text-sm font-semibold text-ink">${esc(p.item)}</p><p class="text-xs text-ink-faint">${esc(p.vendor)}</p></div>
+    ${p.savingsCents > 0 ? `<span class="rounded-full bg-brand-50 px-2.5 py-1 text-xs font-semibold text-brand-700">Save ${money(p.savingsCents)}</span>` : `<i data-lucide="arrow-right" class="h-4 w-4 text-ink-faint"></i>`}
+  </a>`).join("");
 
-  const itemNotes = (e.itemNotes || []).map((n) => `<li class="flex items-start gap-2 py-2"><i data-lucide="info" class="mt-0.5 h-4 w-4 shrink-0 text-ink-faint"></i><span class="text-sm text-ink-soft"><span class="font-medium text-ink">${esc(n.item)}:</span> ${esc(n.note)}</span></li>`).join("");
+  const disclaimer = `<div class="rounded-2xl border border-amber-100 bg-amber-50/80 px-4 py-3 backdrop-blur"><div class="flex items-start gap-2"><i data-lucide="alert-triangle" class="mt-0.5 h-4 w-4 shrink-0 text-amber-600"></i><p class="text-xs leading-relaxed text-amber-800">${e ? esc(e.disclaimer) : "Estimates for planning only — not tax, legal, or accounting advice. Consult a licensed professional."}</p></div></div>`;
 
-  const sourceLinks = (e.sources || []).length
-    ? `<div class="mt-3 text-xs text-ink-faint"><span class="font-semibold">Sources:</span> ${e.sources.map((s) => `<a href="${esc(s.url)}" target="_blank" rel="noreferrer" class="underline hover:text-ink-soft">${esc(s.title || s.url)}</a>`).join(" · ")}</div>`
-    : "";
-
-  const recHeader = pending
-    ? `<h2 class="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-ink-faint"><span class="h-3.5 w-3.5 rounded-full border-2 border-brand-200 border-t-brand-500 ape-spin"></span>Tax efficiency &amp; recommendations<span class="text-[10px] font-medium normal-case text-ink-faint">loading live…</span></h2>`
-    : `<h2 class="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-ink-faint"><i data-lucide="sparkles" class="h-4 w-4"></i>Tax efficiency &amp; recommendations</h2>`;
+  // AI recommendations stream in (covers taxes + beyond-Stripe savings).
+  const recsSkeleton = `<div id="tips-loading" class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+    ${[0, 1, 2, 3].map(() => `<div class="rounded-2xl border border-white/70 bg-white/60 p-4 shadow-soft">
+      <div class="flex items-center gap-2"><span class="h-4 w-4 rounded-full border-2 border-brand-200 border-t-brand-500 ape-spin"></span><span class="text-sm font-medium text-ink-soft">Finding ways to save with Exa + AI…</span></div>
+      <div class="mt-3 space-y-2"><div class="h-2.5 w-3/4 rounded-full bg-black/5"></div><div class="h-2.5 w-1/2 rounded-full bg-black/5"></div></div>
+    </div>`).join("")}
+  </div>
+  <div id="tips-content" class="hidden grid grid-cols-1 gap-3 sm:grid-cols-2"></div>`;
 
   const body = `<div class="space-y-6">
-    <div class="flex items-center justify-between gap-3">
-      <p class="text-sm text-ink-soft">Estimated for <span class="font-semibold text-ink">${esc(e.jurisdictionLabel)}</span></p>
-      ${sourceBadge}
-    </div>
-
-    <div class="rounded-2xl border border-amber-100 bg-amber-50/80 px-4 py-3 backdrop-blur">
-      <div class="flex items-start gap-2">
-        <i data-lucide="alert-triangle" class="mt-0.5 h-4 w-4 shrink-0 text-amber-600"></i>
-        <p class="text-xs leading-relaxed text-amber-800">${esc(e.disclaimer)}</p>
-      </div>
-    </div>
-
     <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">${topMetrics}</div>
-
-    ${P.card(P.cardHeader("Tax breakdown", "Estimated components for the fiscal year.") + `<div class="overflow-x-auto px-1 pb-3 pt-3"><table class="w-full"><thead><tr class="border-b border-gray-100 text-xs uppercase tracking-wide text-ink-faint"><th class="px-4 py-2 text-left">Component</th><th class="px-4 py-2 text-right">Rate</th><th class="px-4 py-2 text-right">Est. tax</th></tr></thead><tbody>${componentRows}</tbody></table></div>` + (sourceLinks ? `<div class="px-5 pb-4">${sourceLinks}</div>` : ""))}
-
+    ${disclaimer}
+    <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+      ${taxCard}
+      ${P.card(P.cardHeader("Quick wins from your spend", "Flagged purchases worth a look right now.") + `<div class="space-y-2 px-5 pb-5 pt-3">${quickWins || `<p class="text-sm text-ink-faint">Nothing flagged — your spend looks efficient.</p>`}</div>`)}
+    </div>
     <section>
-      ${recHeader}
-      ${tipsSection}
+      <h2 class="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-ink-faint"><span class="h-3.5 w-3.5 rounded-full border-2 border-brand-200 border-t-brand-500 ape-spin"></span>Ways to save — taxes &amp; beyond<span class="text-[10px] font-medium normal-case text-ink-faint">loading live…</span></h2>
+      ${recsSkeleton}
     </section>
-
-    ${itemNotes ? P.card(P.cardHeader("How specific items are treated", "Different categories can carry different tax treatment.") + `<ul class="px-5 pb-5 pt-2">${itemNotes}</ul>`) : ""}
   </div>`;
-  return P.pageHeader("Taxes", "Estimated taxes and ways to improve efficiency.") + body;
+  return P.pageHeader("Money Review", "A holistic review of your finances — profit, taxes, and AI-found ways to save.") + body;
 }
 
 module.exports = {
   homePage, purchasesPage, savingsPage, insightsPage,
-  alertsPage, todoPage, reviewPage, settingsPage,
-  financialsPage, taxesPage,
+  alertsPage, reviewPage, settingsPage,
+  financialsPage, overviewPage,
 };
