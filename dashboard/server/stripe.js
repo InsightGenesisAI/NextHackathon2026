@@ -5,150 +5,154 @@
 // Once connected, these getters return the extensive dummy dataset below —
 // standing in for what a real Stripe integration would fetch from the API.
 //
-// The dataset models one fictional company end-to-end so the whole dashboard
-// (purchases, savings, financial health, budgets, alerts, to-dos, renewals)
-// tells a coherent story for demos.
+// DEMO NOTE: the figures below are a rough, illustrative estimate of what
+// Stripe, Inc. (the company itself) might look like, scaled from public
+// reporting and press estimates. They are NOT official and are for
+// demonstration only.
 //
 // Connection state is per-user (user.stripeConnected), set via /connect/stripe.
 
 // ── The demo company (everything below belongs to this one account) ──
 const DEMO_COMPANY = {
-  name: "Northwind Labs",
-  greetingName: "Alex",
+  name: "Stripe, Inc.",
+  greetingName: "Patrick",
   entityType: "C-Corporation",
-  city: "San Francisco",
+  city: "South San Francisco",
   state: "California",
   country: "United States",
-  location: "San Francisco, California, United States",
-  headcount: 52,
+  location: "South San Francisco, California, United States",
+  foundedYear: 2010,
+  headcount: 8500,
+  paymentVolumeAnnualCents: 140000000000000, // ~$1.4T total payment volume
 };
 
-// ── Purchases (24 entries across vendors, statuses, and dates) ──
+// ── Procurement / vendor spend (enterprise scale, monthly invoices) ──
 // status: "approved" (cleared), "review" (awaiting okay), "flagged" (needs action)
 const DEMO_PURCHASES = [
-  { id: "p01", vendor: "Amazon Web Services", item: "AWS — Compute & Storage", priceCents: 412300, billing: "monthly", status: "approved", savingsCents: 0, date: "2026-06-10T07:45:00Z", icon: "☁️" },
-  { id: "p02", vendor: "Slack", item: "Slack Business+ (42 seats)", priceCents: 63000, billing: "monthly", status: "approved", savingsCents: 0, date: "2026-06-10T06:12:00Z", icon: "💬" },
-  { id: "p03", vendor: "Adobe", item: "Adobe Creative Cloud — All Apps (8 seats)", priceCents: 47992, billing: "monthly", status: "flagged", savingsCents: 24000, date: "2026-06-09T16:05:00Z", icon: "🎨" },
-  { id: "p04", vendor: "Notion", item: "Notion Business (50 seats)", priceCents: 75000, billing: "monthly", status: "review", savingsCents: 18000, date: "2026-06-09T14:40:00Z", icon: "📝" },
-  { id: "p05", vendor: "Semrush", item: "SEMrush Guru", priceCents: 24999, billing: "monthly", status: "flagged", savingsCents: 12000, date: "2026-06-09T11:22:00Z", icon: "📈" },
-  { id: "p06", vendor: "HubSpot", item: "HubSpot Marketing Pro", priceCents: 89000, billing: "monthly", status: "approved", savingsCents: 0, date: "2026-06-08T15:30:00Z", icon: "🧲" },
-  { id: "p07", vendor: "Figma", item: "Figma Organization (15 seats)", priceCents: 67500, billing: "monthly", status: "approved", savingsCents: 0, date: "2026-06-08T10:05:00Z", icon: "🖌️" },
-  { id: "p08", vendor: "Datadog", item: "Datadog Pro — Monitoring", priceCents: 138000, billing: "monthly", status: "review", savingsCents: 31000, date: "2026-06-07T19:18:00Z", icon: "🐶" },
-  { id: "p09", vendor: "Zoom", item: "Zoom Business (30 hosts)", priceCents: 59970, billing: "monthly", status: "approved", savingsCents: 0, date: "2026-06-07T13:02:00Z", icon: "🎥" },
-  { id: "p10", vendor: "Salesforce", item: "Sales Cloud Enterprise (12 seats)", priceCents: 198000, billing: "monthly", status: "flagged", savingsCents: 54000, date: "2026-06-06T17:44:00Z", icon: "☁️" },
-  { id: "p11", vendor: "GitHub", item: "GitHub Enterprise (40 seats)", priceCents: 84000, billing: "monthly", status: "approved", savingsCents: 0, date: "2026-06-06T09:15:00Z", icon: "🐙" },
-  { id: "p12", vendor: "Atlassian", item: "Jira + Confluence (45 seats)", priceCents: 71000, billing: "monthly", status: "review", savingsCents: 9000, date: "2026-06-05T12:33:00Z", icon: "🧩" },
-  { id: "p13", vendor: "Mailchimp", item: "Mailchimp Standard", priceCents: 35000, billing: "monthly", status: "flagged", savingsCents: 21000, date: "2026-06-05T08:50:00Z", icon: "🐵" },
-  { id: "p14", vendor: "Google Workspace", item: "Google Workspace Business Plus (50 seats)", priceCents: 90000, billing: "monthly", status: "approved", savingsCents: 0, date: "2026-06-04T16:20:00Z", icon: "📧" },
-  { id: "p15", vendor: "Canva", item: "Canva Teams (10 seats)", priceCents: 10000, billing: "monthly", status: "approved", savingsCents: 0, date: "2026-06-04T11:11:00Z", icon: "🎨" },
-  { id: "p16", vendor: "Linear", item: "Linear Business (38 seats)", priceCents: 53200, billing: "monthly", status: "approved", savingsCents: 0, date: "2026-06-03T14:05:00Z", icon: "📐" },
-  { id: "p17", vendor: "Intercom", item: "Intercom Advanced", priceCents: 119900, billing: "monthly", status: "flagged", savingsCents: 42000, date: "2026-06-03T10:40:00Z", icon: "💬" },
-  { id: "p18", vendor: "Vercel", item: "Vercel Pro (team)", priceCents: 20000, billing: "monthly", status: "approved", savingsCents: 0, date: "2026-06-02T18:25:00Z", icon: "▲" },
-  { id: "p19", vendor: "Snowflake", item: "Snowflake — Data Warehouse", priceCents: 264000, billing: "monthly", status: "review", savingsCents: 60000, date: "2026-06-02T09:48:00Z", icon: "❄️" },
-  { id: "p20", vendor: "1Password", item: "1Password Business (50 seats)", priceCents: 39950, billing: "monthly", status: "approved", savingsCents: 0, date: "2026-06-01T13:30:00Z", icon: "🔐" },
-  { id: "p21", vendor: "Dropbox", item: "Dropbox Business Advanced", priceCents: 60000, billing: "monthly", status: "flagged", savingsCents: 36000, date: "2026-05-31T15:12:00Z", icon: "📦" },
-  { id: "p22", vendor: "Calendly", item: "Calendly Teams (20 seats)", priceCents: 32000, billing: "monthly", status: "approved", savingsCents: 0, date: "2026-05-30T10:00:00Z", icon: "📅" },
-  { id: "p23", vendor: "Webflow", item: "Webflow Site Plan (annual)", priceCents: 276000, billing: "annual", status: "review", savingsCents: 40000, date: "2026-05-29T12:00:00Z", icon: "🌊" },
-  { id: "p24", vendor: "Loom", item: "Loom Business (25 seats)", priceCents: 37500, billing: "monthly", status: "approved", savingsCents: 0, date: "2026-05-28T09:20:00Z", icon: "🎬" },
+  { id: "p01", vendor: "Amazon Web Services", item: "AWS — Compute, Storage & Data Transfer", priceCents: 480000000, billing: "monthly", status: "approved", savingsCents: 0, date: "2026-06-10T07:45:00Z", icon: "☁️" },
+  { id: "p02", vendor: "Snowflake", item: "Snowflake — Data Cloud (Enterprise)", priceCents: 52000000, billing: "monthly", status: "flagged", savingsCents: 9000000, date: "2026-06-10T06:12:00Z", icon: "❄️" },
+  { id: "p03", vendor: "Google Cloud", item: "Google Cloud — BigQuery & GKE", priceCents: 62000000, billing: "monthly", status: "approved", savingsCents: 0, date: "2026-06-09T16:05:00Z", icon: "🌐" },
+  { id: "p04", vendor: "Datadog", item: "Datadog — Observability (org-wide)", priceCents: 41000000, billing: "monthly", status: "flagged", savingsCents: 7500000, date: "2026-06-09T14:40:00Z", icon: "🐶" },
+  { id: "p05", vendor: "Salesforce", item: "Salesforce — Sales & Service Cloud", priceCents: 29000000, billing: "monthly", status: "review", savingsCents: 4200000, date: "2026-06-09T11:22:00Z", icon: "☁️" },
+  { id: "p06", vendor: "Confluent", item: "Confluent Cloud — Kafka streaming", priceCents: 14000000, billing: "monthly", status: "approved", savingsCents: 0, date: "2026-06-08T15:30:00Z", icon: "🌀" },
+  { id: "p07", vendor: "LinkedIn", item: "LinkedIn — Sales Navigator & Recruiter", priceCents: 12000000, billing: "monthly", status: "review", savingsCents: 1800000, date: "2026-06-08T10:05:00Z", icon: "💼" },
+  { id: "p08", vendor: "Atlassian", item: "Jira + Confluence (org-wide)", priceCents: 11000000, billing: "monthly", status: "approved", savingsCents: 0, date: "2026-06-07T19:18:00Z", icon: "🧩" },
+  { id: "p09", vendor: "Slack", item: "Slack Enterprise Grid (8,500 seats)", priceCents: 10625000, billing: "monthly", status: "approved", savingsCents: 0, date: "2026-06-07T13:02:00Z", icon: "💬" },
+  { id: "p10", vendor: "Notion", item: "Notion Enterprise (8,500 seats)", priceCents: 9500000, billing: "monthly", status: "flagged", savingsCents: 2400000, date: "2026-06-06T17:44:00Z", icon: "📝" },
+  { id: "p11", vendor: "Okta", item: "Okta — Workforce Identity", priceCents: 8500000, billing: "monthly", status: "approved", savingsCents: 0, date: "2026-06-06T09:15:00Z", icon: "🔑" },
+  { id: "p12", vendor: "Zoom", item: "Zoom — Enterprise (org-wide)", priceCents: 7200000, billing: "monthly", status: "approved", savingsCents: 0, date: "2026-06-05T12:33:00Z", icon: "🎥" },
+  { id: "p13", vendor: "Gong", item: "Gong — Revenue Intelligence", priceCents: 6600000, billing: "monthly", status: "review", savingsCents: 1200000, date: "2026-06-05T08:50:00Z", icon: "📞" },
+  { id: "p14", vendor: "GitHub", item: "GitHub Enterprise + Copilot", priceCents: 6300000, billing: "monthly", status: "approved", savingsCents: 0, date: "2026-06-04T16:20:00Z", icon: "🐙" },
+  { id: "p15", vendor: "Adobe", item: "Adobe Creative Cloud (Enterprise)", priceCents: 5400000, billing: "monthly", status: "flagged", savingsCents: 1600000, date: "2026-06-04T11:11:00Z", icon: "🎨" },
+  { id: "p16", vendor: "Asana", item: "Asana Enterprise+", priceCents: 5200000, billing: "monthly", status: "flagged", savingsCents: 1400000, date: "2026-06-03T14:05:00Z", icon: "✅" },
+  { id: "p17", vendor: "Figma", item: "Figma Organization (design org)", priceCents: 4800000, billing: "monthly", status: "approved", savingsCents: 0, date: "2026-06-03T10:40:00Z", icon: "🖌️" },
+  { id: "p18", vendor: "1Password", item: "1Password Business (org-wide)", priceCents: 4200000, billing: "monthly", status: "approved", savingsCents: 0, date: "2026-06-02T18:25:00Z", icon: "🔐" },
+  { id: "p19", vendor: "Greenhouse", item: "Greenhouse — Recruiting (ATS)", priceCents: 3800000, billing: "monthly", status: "approved", savingsCents: 0, date: "2026-06-02T09:48:00Z", icon: "🌱" },
+  { id: "p20", vendor: "Workday", item: "Workday — HCM & Financials", priceCents: 18000000, billing: "monthly", status: "approved", savingsCents: 0, date: "2026-06-01T13:30:00Z", icon: "🗂️" },
+  { id: "p21", vendor: "Ramp", item: "Ramp — Corporate cards & spend", priceCents: 3000000, billing: "monthly", status: "approved", savingsCents: 0, date: "2026-05-31T15:12:00Z", icon: "💳" },
+  { id: "p22", vendor: "Miro", item: "Miro Enterprise (whiteboarding)", priceCents: 2600000, billing: "monthly", status: "approved", savingsCents: 0, date: "2026-05-30T10:00:00Z", icon: "🧠" },
 ];
 
-// ── Financial health (rich cash-flow + budget picture) ──
+// ── Financial health (company cash + departmental budgets, monthly view) ──
 const DEMO_FINANCIAL_HEALTH = {
-  status: "watch",
+  status: "good",
   explanation:
-    "Cash flow is solid, but software spend has crept up 11% this quarter. A few subscriptions are over-provisioned — trimming them would extend your runway by roughly two months.",
-  cashOnHandCents: 18750000, // $187,500
-  runwayMonths: 11,
-  monthlyBurnCents: 1685000, // $16,850
-  trend: [162, 168, 171, 169, 176, 182, 179, 188, 184, 191, 187, 169],
+    "Cash position is very strong and the business is profitable on an operating basis. Infrastructure spend is the largest lever — a few tools look over-provisioned and are worth trimming.",
+  cashOnHandCents: 620000000000, // ~$6.2B cash & equivalents
+  runwayMonths: 15, // months of gross opex covered by cash alone (revenue aside)
+  monthlyBurnCents: 41750000000, // ~$417.5M monthly gross operating cost run-rate
+  trend: [402, 408, 411, 416, 420, 433, 426, 430, 436, 442, 447, 470],
   budgets: [
-    { name: "Engineering & Infra", allocatedCents: 1200000, spentCents: 1086300 },
-    { name: "Software & SaaS", allocatedCents: 900000, spentCents: 861500 },
-    { name: "Marketing", allocatedCents: 700000, spentCents: 459000 },
-    { name: "Sales & CRM", allocatedCents: 500000, spentCents: 480000 },
-    { name: "Operations", allocatedCents: 400000, spentCents: 168000 },
-    { name: "Design & Creative", allocatedCents: 250000, spentCents: 175492 },
+    { name: "Cloud & Infrastructure", allocatedCents: 65000000000, spentCents: 61800000000 },
+    { name: "Software & SaaS", allocatedCents: 22000000000, spentCents: 20400000000 },
+    { name: "Sales & Marketing tools", allocatedCents: 18000000000, spentCents: 15200000000 },
+    { name: "Data & Analytics", allocatedCents: 12000000000, spentCents: 10900000000 },
+    { name: "Security & IT", allocatedCents: 9000000000, spentCents: 7600000000 },
+    { name: "People & Recruiting", allocatedCents: 7000000000, spentCents: 5400000000 },
   ],
-  ledger: { cardholderTier: "Scale", recentApprovals: 47, remainingBudgetCents: 1019708 },
+  ledger: { cardholderTier: "Enterprise", recentApprovals: 312, remainingBudgetCents: 12700000000 },
   insight:
-    "Heads up: 4 purchases are flagged and 4 are awaiting review. Acting on the flagged ones could save about $2,190/mo.",
+    "Heads up: 5 purchases are flagged and 3 are awaiting review. Acting on the flagged ones could save about $221K/mo (~$2.65M/yr).",
 };
 
 // ── Comprehensive financials (annual cycle, "from Stripe") ──
-// All cents. Figures model a ~$2.16M ARR SaaS company so the dashboard and tax
-// estimates have a coherent, realistic picture to work from.
+// Illustrative Stripe-scale estimate. All values in cents.
 const DEMO_FINANCIALS = {
   fiscalYear: 2026,
   currency: "USD",
 
-  // Recurring revenue snapshot
-  mrrCents: 18000000, // $180,000 MRR
-  arrCents: 216000000, // $2.16M ARR
+  // Run-rate (Stripe is largely usage-based; shown as a revenue run-rate)
+  mrrCents: 50000000000, // ~$500M/mo net revenue run-rate
+  arrCents: 600000000000, // ~$6.0B annualized net revenue run-rate
 
-  // Revenue streams (annual)
+  // Net revenue streams (annual) — net of amounts passed to partners
   revenue: {
-    totalCents: 224800000, // $2,248,000
+    totalCents: 600000000000, // ~$6.0B net revenue
     streams: [
-      { name: "Subscriptions (SaaS)", amountCents: 198000000 },
-      { name: "Professional services", amountCents: 16800000 },
-      { name: "Marketplace / add-ons", amountCents: 7400000 },
-      { name: "Interest & other income", amountCents: 2600000 },
+      { name: "Payment processing", amountCents: 390000000000 }, // ~$3.9B
+      { name: "Interest & float income", amountCents: 90000000000 }, // ~$900M
+      { name: "Billing & subscriptions", amountCents: 52000000000 }, // ~$520M
+      { name: "Connect (platforms)", amountCents: 41000000000 }, // ~$410M
+      { name: "Financial services (Capital, Issuing, Treasury)", amountCents: 19000000000 }, // ~$190M
+      { name: "Radar, Tax, Atlas & other", amountCents: 8000000000 }, // ~$80M
     ],
-    growthYoYPct: 34,
+    growthYoYPct: 28,
   },
 
-  // Expenses (annual), grouped
+  // Expenses (annual) — includes COGS-type costs + operating expenses
   expenses: {
-    totalCents: 178550000, // $1,785,500
+    totalCents: 501000000000, // ~$5.01B
     categories: [
-      { name: "Payroll & benefits", amountCents: 112000000, taxCategory: "payroll" },
-      { name: "Cloud & infrastructure", amountCents: 21600000, taxCategory: "software" },
-      { name: "Software & SaaS tools", amountCents: 14400000, taxCategory: "software" },
-      { name: "Marketing & advertising", amountCents: 12800000, taxCategory: "marketing" },
-      { name: "Office & rent", amountCents: 8400000, taxCategory: "rent" },
-      { name: "Professional services (legal/acct)", amountCents: 4200000, taxCategory: "services" },
-      { name: "Travel & entertainment", amountCents: 2600000, taxCategory: "travel" },
-      { name: "Equipment & hardware", amountCents: 1900000, taxCategory: "equipment" },
-      { name: "Other operating", amountCents: 650000, taxCategory: "other" },
+      { name: "Payment & network costs", amountCents: 215000000000, taxCategory: "cogs" }, // ~$2.15B
+      { name: "Payroll & benefits", amountCents: 140000000000, taxCategory: "payroll" }, // ~$1.4B
+      { name: "Cloud & infrastructure", amountCents: 47000000000, taxCategory: "software" }, // ~$470M
+      { name: "Transaction loss & fraud provisions", amountCents: 30000000000, taxCategory: "losses" }, // ~$300M
+      { name: "Marketing & advertising", amountCents: 19000000000, taxCategory: "marketing" }, // ~$190M
+      { name: "Office & real estate", amountCents: 15000000000, taxCategory: "rent" }, // ~$150M
+      { name: "Professional services (legal/acct)", amountCents: 12000000000, taxCategory: "services" }, // ~$120M
+      { name: "Software & SaaS tools", amountCents: 6500000000, taxCategory: "software" }, // ~$65M
+      { name: "Travel & entertainment", amountCents: 5500000000, taxCategory: "travel" }, // ~$55M
+      { name: "Equipment & hardware", amountCents: 4000000000, taxCategory: "equipment" }, // ~$40M
+      { name: "Other operating", amountCents: 7000000000, taxCategory: "other" }, // ~$70M
     ],
   },
 
-  // Cost of goods sold (annual) — used for gross margin
-  cogsCents: 38500000, // $385,000 (hosting, support, payment fees tied to delivery)
+  // Cost of goods sold (annual) — payment/network costs, loss provisions, delivery infra
+  cogsCents: 265000000000, // ~$2.65B
 
   // Derived profitability (annual)
-  grossProfitCents: 186300000, // revenue.total - cogs
-  grossMarginPct: 82.9,
-  operatingExpensesCents: 140050000, // expenses.total - cogs portion already counted
-  operatingProfitCents: 46250000, // EBIT, $462,500
-  operatingMarginPct: 20.6,
-  ebitdaCents: 52900000, // $529,000
-  netProfitBeforeTaxCents: 46250000, // $462,500 taxable base (pre-tax)
-  netMarginPct: 20.6,
+  grossProfitCents: 335000000000, // revenue.total - cogs  (~$3.35B)
+  grossMarginPct: 55.8,
+  operatingExpensesCents: 236000000000, // expenses.total - cogs  (~$2.36B)
+  operatingProfitCents: 99000000000, // EBIT (~$990M)
+  operatingMarginPct: 16.5,
+  ebitdaCents: 125000000000, // ~$1.25B
+  netProfitBeforeTaxCents: 94000000000, // ~$940M taxable base (pre-tax)
+  netMarginPct: 15.7,
 
-  // Monthly P&L trend (last 12 months, cents) — revenue vs expenses
+  // Monthly P&L trend (last 12 months, cents) — net revenue vs expenses
   monthly: [
-    { month: "Jul", revenueCents: 16800000, expensesCents: 13900000 },
-    { month: "Aug", revenueCents: 17200000, expensesCents: 14100000 },
-    { month: "Sep", revenueCents: 17600000, expensesCents: 14300000 },
-    { month: "Oct", revenueCents: 18100000, expensesCents: 14600000 },
-    { month: "Nov", revenueCents: 18400000, expensesCents: 14800000 },
-    { month: "Dec", revenueCents: 19200000, expensesCents: 15200000 },
-    { month: "Jan", revenueCents: 18600000, expensesCents: 14900000 },
-    { month: "Feb", revenueCents: 18900000, expensesCents: 15050000 },
-    { month: "Mar", revenueCents: 19400000, expensesCents: 15300000 },
-    { month: "Apr", revenueCents: 19800000, expensesCents: 15500000 },
-    { month: "May", revenueCents: 20100000, expensesCents: 15650000 },
-    { month: "Jun", revenueCents: 20700000, expensesCents: 16850000 },
+    { month: "Jul", revenueCents: 46000000000, expensesCents: 38800000000 },
+    { month: "Aug", revenueCents: 47000000000, expensesCents: 39200000000 },
+    { month: "Sep", revenueCents: 48000000000, expensesCents: 39800000000 },
+    { month: "Oct", revenueCents: 49000000000, expensesCents: 40400000000 },
+    { month: "Nov", revenueCents: 50000000000, expensesCents: 41000000000 },
+    { month: "Dec", revenueCents: 52000000000, expensesCents: 42500000000 },
+    { month: "Jan", revenueCents: 50500000000, expensesCents: 41800000000 },
+    { month: "Feb", revenueCents: 51000000000, expensesCents: 42000000000 },
+    { month: "Mar", revenueCents: 52000000000, expensesCents: 42400000000 },
+    { month: "Apr", revenueCents: 53000000000, expensesCents: 43000000000 },
+    { month: "May", revenueCents: 53500000000, expensesCents: 43200000000 },
+    { month: "Jun", revenueCents: 54000000000, expensesCents: 46900000000 },
   ],
 
   // Useful ratios / KPIs
   kpis: {
-    burnMultiple: 0.6,
-    cacPaybackMonths: 11,
-    ltvToCac: 4.2,
-    grossChurnPctMonthly: 1.8,
-    netRevenueRetentionPct: 114,
+    paymentVolumeAnnualCents: 140000000000000, // ~$1.4T
+    takeRatePctNet: 0.43, // net revenue / payment volume
+    grossMarginPct: 55.8,
+    ruleOf40: 43.7, // growth (28) + operating margin (16.5) ≈ 44.5
+    netRevenueRetentionPct: 122,
   },
 };
 
@@ -158,46 +162,47 @@ const DEMO_TAX_PROFILE = {
   location: DEMO_COMPANY.location,
   country: DEMO_COMPANY.country,
   state: DEMO_COMPANY.state,
-  taxableIncomeCents: DEMO_FINANCIALS.netProfitBeforeTaxCents, // $462,500
+  taxableIncomeCents: DEMO_FINANCIALS.netProfitBeforeTaxCents, // ~$940M
   fiscalYear: DEMO_FINANCIALS.fiscalYear,
   // Items/categories that may carry different treatment (deductions/credits).
   notableItems: [
-    { name: "R&D / engineering payroll", amountCents: 64000000, note: "May qualify for R&D tax credit" },
-    { name: "Cloud & software", amountCents: 36000000, note: "Generally fully deductible operating expense" },
-    { name: "Equipment & hardware", amountCents: 1900000, note: "May be eligible for Section 179 / bonus depreciation" },
-    { name: "Travel & entertainment", amountCents: 2600000, note: "Meals often only 50% deductible" },
-    { name: "Marketing & advertising", amountCents: 12800000, note: "Generally fully deductible" },
+    { name: "R&D / engineering payroll", amountCents: 62000000000, note: "May qualify for R&D tax credit (Section 41)" },
+    { name: "Cloud & software", amountCents: 53500000000, note: "Generally fully deductible operating expense" },
+    { name: "Transaction loss provisions", amountCents: 30000000000, note: "Bad-debt / loss reserves may be deductible when incurred" },
+    { name: "Equipment & hardware", amountCents: 4000000000, note: "May be eligible for bonus depreciation" },
+    { name: "Travel & entertainment", amountCents: 5500000000, note: "Meals often only 50% deductible" },
+    { name: "Marketing & advertising", amountCents: 19000000000, note: "Generally fully deductible" },
   ],
 };
 
 // ── Actions: to-dos, upcoming renewals, recommendations ──
 const DEMO_ACTIONS = {
   todos: [
-    { id: "t1", title: "Review 4 flagged purchases", detail: "Adobe, Salesforce, Intercom, and Dropbox look over-provisioned.", priority: "high", done: false },
-    { id: "t2", title: "Approve pending Snowflake spend", detail: "$2,640 data-warehouse charge is awaiting your okay.", due: "2026-06-12", priority: "high", done: false },
-    { id: "t3", title: "Reclaim unused Adobe seats", detail: "3 of 8 Creative Cloud seats haven't been used in 30 days.", due: "2026-06-15", priority: "medium", done: false },
-    { id: "t4", title: "Consolidate Mailchimp into HubSpot", detail: "You're paying for email in two tools.", due: "2026-06-18", priority: "medium", done: false },
-    { id: "t5", title: "Renegotiate Salesforce contract", detail: "Renewal is in 24 days — you qualify for annual pricing.", due: "2026-07-04", priority: "medium", done: false },
-    { id: "t6", title: "Audit Dropbox vs Google Workspace storage", detail: "Overlapping storage spend of ~$360/mo.", priority: "low", done: false },
-    { id: "t7", title: "Set an approval threshold", detail: "Purchases over $1,000 currently auto-clear.", priority: "low", done: false },
+    { id: "t1", title: "Review 5 flagged purchases", detail: "Snowflake, Datadog, Notion, Adobe, and Asana look over-provisioned.", priority: "high", done: false },
+    { id: "t2", title: "Approve pending Salesforce renewal", detail: "$290K/mo Sales & Service Cloud is awaiting your okay.", due: "2026-06-12", priority: "high", done: false },
+    { id: "t3", title: "Negotiate AWS committed-use discount", detail: "At $4.8M/mo, a longer commitment could cut 12–18%.", due: "2026-06-20", priority: "high", done: false },
+    { id: "t4", title: "Right-size Datadog hosts & ingestion", detail: "Observability spend is up 22% QoQ — trim unused hosts.", due: "2026-06-18", priority: "medium", done: false },
+    { id: "t5", title: "Consolidate Asana into Jira", detail: "Two project tools overlap across teams.", due: "2026-07-01", priority: "medium", done: false },
+    { id: "t6", title: "Audit Snowflake warehouse sizing", detail: "Auto-suspend and right-size to curb idle compute.", priority: "medium", done: false },
+    { id: "t7", title: "Reclaim unused Adobe & Notion seats", detail: "~1,200 seats inactive 30+ days across both.", priority: "low", done: false },
   ],
   renewals: [
-    { id: "r1", name: "Salesforce Sales Cloud", priceCents: 198000, billing: "monthly", renewsOn: "2026-06-13", icon: "☁️" },
-    { id: "r2", name: "Datadog Pro", priceCents: 138000, billing: "monthly", renewsOn: "2026-06-16", icon: "🐶" },
-    { id: "r3", name: "Adobe Creative Cloud", priceCents: 47992, billing: "monthly", renewsOn: "2026-06-18", icon: "🎨" },
-    { id: "r4", name: "Webflow Site Plan", priceCents: 276000, billing: "annual", renewsOn: "2026-06-22", icon: "🌊" },
-    { id: "r5", name: "Google Workspace", priceCents: 90000, billing: "monthly", renewsOn: "2026-06-24", icon: "📧" },
-    { id: "r6", name: "HubSpot Marketing Pro", priceCents: 89000, billing: "monthly", renewsOn: "2026-06-28", icon: "🧲" },
-    { id: "r7", name: "Snowflake", priceCents: 264000, billing: "monthly", renewsOn: "2026-07-01", icon: "❄️" },
-    { id: "r8", name: "Zoom Business", priceCents: 59970, billing: "monthly", renewsOn: "2026-07-03", icon: "🎥" },
+    { id: "r1", name: "Workday HCM & Financials", priceCents: 18000000, billing: "monthly", renewsOn: "2026-06-13", icon: "🗂️" },
+    { id: "r2", name: "Salesforce", priceCents: 29000000, billing: "monthly", renewsOn: "2026-06-16", icon: "☁️" },
+    { id: "r3", name: "Datadog", priceCents: 41000000, billing: "monthly", renewsOn: "2026-06-18", icon: "🐶" },
+    { id: "r4", name: "Snowflake", priceCents: 52000000, billing: "monthly", renewsOn: "2026-06-22", icon: "❄️" },
+    { id: "r5", name: "Amazon Web Services", priceCents: 480000000, billing: "monthly", renewsOn: "2026-06-24", icon: "☁️" },
+    { id: "r6", name: "Okta", priceCents: 8500000, billing: "monthly", renewsOn: "2026-06-28", icon: "🔑" },
+    { id: "r7", name: "Confluent Cloud", priceCents: 14000000, billing: "monthly", renewsOn: "2026-07-01", icon: "🌀" },
+    { id: "r8", name: "GitHub Enterprise", priceCents: 6300000, billing: "monthly", renewsOn: "2026-07-03", icon: "🐙" },
   ],
   recommended: [
-    { id: "ra1", title: "Cut 3 unused Adobe seats", detail: "Drop from 8 to 5 seats — saves $1,800/mo.", priority: "high" },
-    { id: "ra2", title: "Right-size Salesforce licenses", detail: "4 inactive seats. Removing them saves $540/mo.", priority: "high" },
-    { id: "ra3", title: "Replace Intercom with HubSpot chat", detail: "You already pay for HubSpot — saves $420/mo.", priority: "medium" },
-    { id: "ra4", title: "Move Webflow to annual billing", detail: "Already annual — confirm the 18% discount applied.", priority: "low" },
-    { id: "ra5", title: "Consolidate email tools", detail: "Mailchimp overlaps HubSpot — saves $210/mo.", priority: "medium" },
-    { id: "ra6", title: "Review Snowflake usage tier", detail: "Spend up 32% MoM — check for runaway queries.", priority: "high" },
+    { id: "ra1", title: "Lock an AWS 3-year commitment", detail: "Committed-use / savings plans could cut ~15% — about $720K/mo.", priority: "high" },
+    { id: "ra2", title: "Right-size Snowflake warehouses", detail: "Auto-suspend + sizing could save ~$90K/mo.", priority: "high" },
+    { id: "ra3", title: "Trim Datadog hosts & log ingestion", detail: "Drop unused monitors and cap ingestion — saves ~$75K/mo.", priority: "high" },
+    { id: "ra4", title: "Consolidate Asana into Jira", detail: "Remove the overlapping tool — saves ~$52K/mo.", priority: "medium" },
+    { id: "ra5", title: "Reclaim inactive Adobe/Notion seats", detail: "Recover ~1,200 unused seats — saves ~$40K/mo.", priority: "medium" },
+    { id: "ra6", title: "Renegotiate Salesforce at renewal", detail: "Annual prepay + seat right-size — saves ~$42K/mo.", priority: "medium" },
   ],
 };
 
@@ -205,11 +210,11 @@ const DEMO_ACTIONS = {
 const DEMO_SUMMARY = {
   greetingName: DEMO_COMPANY.greetingName,
   protectionOn: true,
-  potentialSavingsCents: 219000, // $2,190 across flagged + review items
+  potentialSavingsCents: 29100000, // ~$291K/mo across flagged + review items
   activeReviews: 8,
-  budgetHealth: "watch",
-  monthSpendCents: 1685000, // $16,850 this month
-  monthSpendChangePct: 11,
+  budgetHealth: "good",
+  monthSpendCents: 636025000, // ~$6.36M/mo on monitored tools
+  monthSpendChangePct: 6,
 };
 
 // ── Empty defaults (shown before Stripe is connected) ──
