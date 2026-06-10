@@ -1,67 +1,86 @@
-# AgentCFO Dashboard
+# AgentCFO Dashboard Hub
 
-A friendly, small-business-focused frontend for AgentCFO — the AI finance
-assistant that helps owners avoid overspending, find better alternatives, and
-keep an eye on budget health. Built with Next.js (App Router), Tailwind CSS, and
-lucide-react.
+A friendly, small-business-focused finance dashboard for AgentCFO — now built as
+a **pure Node.js** app with no framework. It uses only Node's built-in modules
+(`http`, `url`) to serve both:
 
-This dashboard wraps the existing Python APE backend (Chrome extension + FastAPI
-hub). It does **not** replace any backend logic — it provides a calmer, simpler UI
-around the same intercept / resolve / financial-health endpoints.
+- the **dashboard UI** (server-rendered HTML, styled with Tailwind via CDN and
+  Lucide icons), and
+- the **hub API** at `/api/v1/*` that holds purchase history and financial
+  summaries.
 
-## Pages
-
-- **Home** (`/`) — greeting, today-at-a-glance metrics, recent activity, and a
-  demo button that opens the checkout review overlay.
-- **Purchase Review** (`/review`) — better-alternatives view with the agent
-  timeline ("How AgentCFO decided") and an audit-log drawer.
-- **Financial Health** (`/insights`) — cash flow status, budgets, and Stripe
-  ledger snapshot in plain English.
-- **To Do** (`/todo`) — tasks, upcoming renewals, and recommended actions.
-- **Purchases / Savings / Alerts / Settings** — supporting views.
+The dashboard is the hub. The separate browser extension reports intercepted
+purchases to it and reads financial context back.
 
 ## Run locally
 
 ```bash
 cd dashboard
-npm install
-cp .env.example .env.local   # optional — defaults to http://127.0.0.1:8787
-npm run dev                  # http://localhost:3000
+npm start            # node server/index.js  → http://localhost:3000
 ```
 
-Start the Python hub (`python api_server.py` in the repo root) so live data flows
-in. If the hub is offline or an endpoint is missing, the UI automatically falls
-back to friendly mock data — it never breaks.
+No dependencies to install — it's all built-in Node. Requires Node 18+.
 
-## Backend integration
+Set `PORT` to change the port:
 
-The API layer lives in `src/lib/api.ts`. It calls these endpoints and degrades
-gracefully to mocks (`src/lib/mockData.ts`) on error or timeout (4.5s soft cap):
+```bash
+PORT=8080 npm start
+```
 
-| Endpoint | Used by |
-|----------|---------|
-| `GET /api/v1/dashboard/summary` | Home metrics |
-| `GET /api/v1/purchases/recent` | Activity tables |
-| `POST /api/v1/intercept` | Purchase review (mapped from the real APE pipeline) |
-| `POST /api/v1/resolve` | Approve / decline a purchase |
-| `POST /api/v1/review` | Human-in-the-loop justification check |
-| `GET /api/v1/financial-health` | Financial Health page |
-| `GET /api/v1/actions` | To Do page |
-| `GET /api/v1/audit-log` | Agent timeline + audit log |
+## Pages
 
-During dev, calls go through the `/hub/*` rewrite (see `next.config.mjs`) to
-`PYTHON_HUB_URL`. In production, set `NEXT_PUBLIC_API_BASE` to your deployed
-backend, or keep the rewrite and set `PYTHON_HUB_URL` on Vercel.
+- `/` — greeting, today-at-a-glance metrics, recent activity, demo review modal
+- `/purchases` — full purchase history
+- `/savings` — savings opportunities
+- `/insights` — financial health (cash flow, budgets, ledger)
+- `/alerts` — purchases needing a look
+- `/todo` — tasks, renewals, recommended actions
+- `/review` — better-alternatives view with agent timeline + audit log drawer
+- `/settings` — protection and fallback preferences
+
+## Hub API
+
+CORS-enabled so the browser extension can call it from any origin.
+
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| GET | `/api/v1/health` | Health check |
+| GET | `/api/v1/dashboard/summary` | Home metrics |
+| GET | `/api/v1/purchases/recent` | Recent purchase history |
+| GET/POST | `/api/v1/purchases` | List / record a purchase (extension reports here) |
+| GET | `/api/v1/financial-health` | Financial context (extension reads this) |
+| GET | `/api/v1/actions` | To-do, renewals, recommendations |
+| GET | `/api/v1/audit-log` | Agent timeline + audit log |
+
+`POST /api/v1/purchases` accepts both dashboard-style (`vendor`, `priceCents`)
+and extension-style (`merchant`, `amount_cents`) field names.
+
+## Project layout
+
+```
+server/
+  index.js          # HTTP server: routing, API, static client script
+  store.js          # in-memory hub store (history + summaries)
+  mockData.js       # seed data
+  format.js         # money/date helpers + HTML escaping
+  clientScript.js   # browser JS (served from memory at /app.js)
+  views/
+    layout.js       # HTML shell (Tailwind CDN + Lucide)
+    partials.js     # reusable UI fragments
+    pages.js        # per-page render functions
+api/index.js        # Vercel serverless entrypoint → server handler
+vercel.json         # routes all requests to the Node handler
+```
+
+> Note: the store is in-memory, so history resets on restart (and on serverless
+> cold starts). Swap `store.js` for a real database for production.
 
 ## Deploy to Vercel
 
-This app is Vercel-native. From the `dashboard/` directory:
+`vercel.json` is configured to run the Node handler as a serverless function
+(`@vercel/node`) and rewrite all routes to it. Set the project root directory to
+`dashboard` in the Vercel project settings.
 
 ```bash
-vercel            # preview
-vercel --prod     # production
+vercel --prod
 ```
-
-Set `PYTHON_HUB_URL` (and optionally `NEXT_PUBLIC_API_BASE`) in the Vercel
-project's Environment Variables. The repo's root directory in Vercel should be
-`dashboard`.

@@ -25,6 +25,7 @@
 
     const panelOpts = {
       ...checkoutContext,
+      cart: cartPayload,
       isFallback: !result.ok,
       showFailOpen: !result.ok && riskTolerance === "fail-open",
       onSessionEnd: releaseInterceptLock,

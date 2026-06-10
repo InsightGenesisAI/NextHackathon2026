@@ -182,6 +182,51 @@ const PythonBridge = (() => {
     });
   }
 
+  /**
+   * Report a decided purchase to the dashboard hub (Vercel) so it shows up in
+   * history. Fire-and-forget — never blocks or breaks the checkout flow.
+   */
+  function reportPurchaseToHub(purchase) {
+    return new Promise((resolve) => {
+      try {
+        chrome.runtime.sendMessage(
+          { type: "HUB_REPORT_PURCHASE", payload: purchase },
+          (response) => {
+            if (chrome.runtime.lastError) {
+              resolve({ ok: false, error: chrome.runtime.lastError.message });
+              return;
+            }
+            resolve({ ok: !response?.error, ...response });
+          }
+        );
+      } catch (err) {
+        resolve({ ok: false, error: err.message });
+      }
+    });
+  }
+
+  /**
+   * Read financial context from the dashboard hub (Vercel).
+   */
+  function getHubFinancialHealth() {
+    return new Promise((resolve, reject) => {
+      chrome.runtime.sendMessage(
+        { type: "HUB_FINANCIAL_HEALTH" },
+        (response) => {
+          if (chrome.runtime.lastError) {
+            reject(new Error(chrome.runtime.lastError.message));
+            return;
+          }
+          if (response?.error) {
+            reject(new Error(response.error));
+            return;
+          }
+          resolve(response);
+        }
+      );
+    });
+  }
+
   return {
     BACKEND_TIMEOUT_MS,
     transmitToPythonHub,
@@ -189,6 +234,8 @@ const PythonBridge = (() => {
     executeBackendFallback,
     resolveWithPython,
     reviewWithPython,
+    reportPurchaseToHub,
+    getHubFinancialHealth,
     getConfig,
   };
 })();

@@ -10,6 +10,9 @@ const LiquidGlassUI = (() => {
     originForm: null,
     showFailOpen: false,
     onSessionEnd: null,
+    cart: null,
+    audit: null,
+    reported: false,
   };
 
   const ICONS = {
@@ -233,6 +236,9 @@ const LiquidGlassUI = (() => {
     session.originForm = checkoutContext.originForm || null;
     session.showFailOpen = !!checkoutContext.showFailOpen;
     session.onSessionEnd = checkoutContext.onSessionEnd || null;
+    session.cart = checkoutContext.cart || null;
+    session.audit = audit;
+    session.reported = false;
 
     overlay.className = "ape-glass";
     overlay.innerHTML = `
@@ -333,6 +339,39 @@ const LiquidGlassUI = (() => {
       </details>`;
   }
 
+  /**
+   * Build a hub-friendly purchase record from the captured cart + audit, then
+   * report it to the dashboard hub (Vercel) so it appears in history.
+   * Fire-and-forget and de-duped per session.
+   */
+  function reportDecisionToHub(status) {
+    if (session.reported) return;
+    session.reported = true;
+
+    const cart = session.cart || {};
+    const audit = session.audit || {};
+    const market = audit.capsules && audit.capsules.market;
+    const premium = (audit.signals && audit.signals.market_premium_percent) ||
+      (market && market.metric_percent) || 0;
+    const amount = cart.amount_cents || 0;
+    const savings = premium > 0 ? Math.round((amount * premium) / (100 + premium)) : 0;
+
+    const purchase = {
+      merchant: cart.merchant || "Detected vendor",
+      item:
+        (cart.line_items && cart.line_items[0] && cart.line_items[0].name) ||
+        cart.merchant ||
+        "Detected purchase",
+      amount_cents: amount,
+      status,
+      savingsCents: status === "approved" ? 0 : savings,
+    };
+
+    if (typeof PythonBridge !== "undefined" && PythonBridge.reportPurchaseToHub) {
+      PythonBridge.reportPurchaseToHub(purchase);
+    }
+  }
+
   async function handleAbortClick() {
     const status = overlayEl.querySelector("#ape-status");
     status.hidden = false;
@@ -346,6 +385,8 @@ const LiquidGlassUI = (() => {
     } catch (err) {
       status.textContent = `Decline sent locally (${err.message}).`;
     }
+
+    reportDecisionToHub("flagged");
 
     setTimeout(() => {
       destroyModal();
@@ -404,6 +445,8 @@ const LiquidGlassUI = (() => {
       status.className = "ape-glass-status ape-glass-status--success";
       status.textContent = "Approved — releasing checkout.";
 
+      reportDecisionToHub("approved");
+
       setTimeout(() => {
         destroyModal();
         SpokeExtension.triggerOriginalCheckout(session.originButton, session.originForm);
@@ -438,6 +481,7 @@ const LiquidGlassUI = (() => {
   }
 
   function handleFailOpenProceed() {
+    reportDecisionToHub("review");
     destroyModal();
     SpokeExtension.triggerOriginalCheckout(session.originButton, session.originForm);
   }
@@ -454,6 +498,9 @@ const LiquidGlassUI = (() => {
       originForm: null,
       showFailOpen: false,
       onSessionEnd: null,
+      cart: null,
+      audit: null,
+      reported: false,
     };
     if (typeof cb === "function") cb();
   }

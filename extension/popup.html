@@ -157,18 +157,20 @@
           <strong>Preview Hard-Wall UI</strong>
           <span>Mock Exa / Stripe / DNA — no backend</span>
         </button>
-        <button type="button" id="launchServerDemo" class="launch-btn">
-          <strong>HTTP Demo (content script test)</strong>
-          <span>Opens http://127.0.0.1:8787/demo</span>
+        <button type="button" id="openDashboard" class="launch-btn">
+          <strong>Open Dashboard Hub</strong>
+          <span>History &amp; financial health on Vercel</span>
         </button>
       </div>
 
-      <p id="hub-status"><span class="status-dot" id="hub-dot"></span><span id="hub-text">Checking Python hub…</span></p>
+      <p id="hub-status"><span class="status-dot" id="hub-dot"></span><span id="hub-text">Checking dashboard hub…</span></p>
 
       <details>
         <summary>Settings</summary>
-        <label for="apiBase">Python hub URL</label>
+        <label for="apiBase">Audit backend URL</label>
         <input id="apiBase" type="text" value="http://127.0.0.1:8787" />
+        <label for="hubBase">Dashboard hub URL</label>
+        <input id="hubBase" type="text" value="https://next-hackathon2026.vercel.app" />
         <label for="riskTolerance">Backend timeout fallback</label>
         <select id="riskTolerance">
           <option value="fail-closed">Fail-closed (block + retry)</option>

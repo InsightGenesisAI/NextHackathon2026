@@ -5,6 +5,7 @@
   "description": "Thin-client checkout interceptor — Glass Brain telemetry, chain-of-thought audit logs, and HITL override. All intelligence runs on the Python APE backend.",
   "permissions": ["storage", "activeTab"],
   "host_permissions": [
+    "https://next-hackathon2026.vercel.app/*",
     "http://127.0.0.1:8787/*",
     "http://localhost:8787/*",
     "https://*/*",
