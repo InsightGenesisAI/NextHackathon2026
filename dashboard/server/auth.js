@@ -40,6 +40,7 @@ function createUser({ name, email, company, country, address, password }) {
     passwordHash: hashPassword(password),
     createdAt: new Date().toISOString(),
     profileComplete: false,
+    stripeConnected: false, // gates all financial data — empty until connected
     companyProfile: null, // structured company data (from Exa+AI or manual)
     profile: null,        // { contextAnswers: [...] }
   };
@@ -76,6 +77,14 @@ function saveCompanyProfile(email, companyProfile) {
   if (companyProfile && companyProfile.legalName && !user.company) {
     user.company = companyProfile.legalName;
   }
+  return user;
+}
+
+// Toggle Stripe connection. Until connected, the dashboard shows no data.
+function setStripeConnected(email, connected) {
+  const user = getUser(email);
+  if (!user) return null;
+  user.stripeConnected = !!connected;
   return user;
 }
 
@@ -149,6 +158,7 @@ module.exports = {
   getUser,
   saveProfile,
   saveCompanyProfile,
+  setStripeConnected,
   setPendingEnrichment,
   getPendingEnrichment,
   createSession,

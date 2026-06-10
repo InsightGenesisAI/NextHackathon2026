@@ -11,7 +11,7 @@ const http = require("http");
 const { URL } = require("url");
 
 const store = require("./store");
-const { mockReview } = require("./mockData");
+const { mockReview, mockAgentActivity } = require("./mockData");
 const { layout } = require("./views/layout");
 const pages = require("./views/pages");
 const { CLIENT_JS } = require("./clientScript");
@@ -93,25 +93,25 @@ function renderPage(pathname, user) {
   switch (pathname) {
     case "/":
       return layout({ title: "AgentCFO — Your AI Finance Assistant", pathname, user, extraScript: SCRIPT_TAG,
-        body: pages.homePage({ summary: store.getDashboardSummaryForUser(user), purchases: store.getRecentPurchases(), review: mockReview }) });
+        body: pages.homePage({ summary: store.getDashboardSummaryForUser(user), purchases: store.getRecentPurchasesForUser(user), review: mockReview, user }) });
     case "/purchases":
       return layout({ title: "Purchases — AgentCFO", pathname, user, extraScript: SCRIPT_TAG,
-        body: pages.purchasesPage({ purchases: store.getRecentPurchases() }) });
+        body: pages.purchasesPage({ purchases: store.getRecentPurchasesForUser(user), user }) });
     case "/savings":
       return layout({ title: "Savings — AgentCFO", pathname, user, extraScript: SCRIPT_TAG,
-        body: pages.savingsPage({ purchases: store.getRecentPurchases(), summary: store.getDashboardSummaryForUser(user) }) });
+        body: pages.savingsPage({ purchases: store.getRecentPurchasesForUser(user), summary: store.getDashboardSummaryForUser(user), user }) });
     case "/insights":
       return layout({ title: "Financial Health — AgentCFO", pathname, user, extraScript: SCRIPT_TAG,
-        body: pages.insightsPage({ health: store.getFinancialHealth() }) });
+        body: pages.insightsPage({ health: store.getFinancialHealthForUser(user), user }) });
     case "/alerts":
       return layout({ title: "Alerts — AgentCFO", pathname, user, extraScript: SCRIPT_TAG,
-        body: pages.alertsPage({ purchases: store.getRecentPurchases() }) });
+        body: pages.alertsPage({ purchases: store.getRecentPurchasesForUser(user), user }) });
     case "/todo":
       return layout({ title: "To Do — AgentCFO", pathname, user, extraScript: SCRIPT_TAG,
-        body: pages.todoPage(store.getActions()) });
+        body: pages.todoPage({ ...store.getActionsForUser(user), user }) });
     case "/review":
       return layout({ title: "Purchase Review — AgentCFO", pathname, user, extraScript: SCRIPT_TAG,
-        body: pages.reviewPage({ review: mockReview, activity: store.getAgentActivity() }) });
+        body: pages.reviewPage({ review: mockReview, activity: mockAgentActivity }) });
     case "/settings":
       return layout({ title: "Settings — AgentCFO", pathname, user, extraScript: SCRIPT_TAG,
         body: pages.settingsPage({ user }) });
@@ -131,22 +131,22 @@ async function handleApi(req, res, pathname) {
     return sendJson(res, 200, { status: "ok", service: "agentcfo-dashboard-hub" });
 
   if (pathname === "/api/v1/dashboard/summary" && req.method === "GET")
-    return sendJson(res, 200, store.getDashboardSummary());
+    return sendJson(res, 200, store.hubSummary());
 
   if (pathname === "/api/v1/financial-health" && req.method === "GET")
-    return sendJson(res, 200, store.getFinancialHealth());
+    return sendJson(res, 200, store.hubFinancialHealth());
 
   if (pathname === "/api/v1/actions" && req.method === "GET")
-    return sendJson(res, 200, store.getActions());
+    return sendJson(res, 200, store.hubActions());
 
   if (pathname === "/api/v1/audit-log" && req.method === "GET")
-    return sendJson(res, 200, store.getAgentActivity());
+    return sendJson(res, 200, mockAgentActivity);
 
   if (pathname === "/api/v1/purchases/recent" && req.method === "GET")
-    return sendJson(res, 200, store.getRecentPurchases());
+    return sendJson(res, 200, store.hubPurchases());
 
   if (pathname === "/api/v1/purchases") {
-    if (req.method === "GET") return sendJson(res, 200, store.getRecentPurchases());
+    if (req.method === "GET") return sendJson(res, 200, store.hubPurchases());
     if (req.method === "POST") {
       let body;
       try { body = await readBody(req); }
@@ -223,6 +223,17 @@ async function handleAuth(req, res, pathname) {
     }
     const token = auth.createSession(user.email);
     redirect(res, user.profileComplete ? "/" : "/onboarding", auth.sessionCookie(token));
+    return true;
+  }
+
+  // Connect / disconnect Stripe (requires a session). In this demo this just
+  // flips a flag; a real integration would run Stripe OAuth / Connect here.
+  if (req.method === "POST" && (pathname === "/connect/stripe" || pathname === "/disconnect/stripe")) {
+    const user = auth.userFromRequest(req);
+    if (!user) { redirect(res, "/login"); return true; }
+    auth.setStripeConnected(user.email, pathname === "/connect/stripe");
+    const form = await readForm(req);
+    redirect(res, form.return || "/");
     return true;
   }
 

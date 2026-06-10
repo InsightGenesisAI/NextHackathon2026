@@ -22,6 +22,39 @@ function pageHeader(title, subtitle, action = "") {
   </div>`;
 }
 
+// Prominent banner prompting the user to connect Stripe. `returnTo` is where to
+// send them back to after connecting.
+function connectStripeBanner(returnTo = "/") {
+  return `<div class="overflow-hidden rounded-2xl border border-brand-200 bg-gradient-to-br from-brand-50 to-white p-6 shadow-card">
+    <div class="flex flex-wrap items-center justify-between gap-4">
+      <div class="flex items-start gap-3">
+        <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand-500 text-white"><i data-lucide="link" class="h-5 w-5"></i></span>
+        <div>
+          <h2 class="text-base font-semibold text-ink">Connect Stripe to get started</h2>
+          <p class="mt-0.5 max-w-xl text-sm text-ink-soft">Your dashboard is empty until you connect Stripe. Once linked, AgentCFO pulls your spending, budgets, and financial health automatically.</p>
+        </div>
+      </div>
+      <form method="POST" action="/connect/stripe">
+        <input type="hidden" name="return" value="${esc(returnTo)}" />
+        <button type="submit" class="inline-flex items-center gap-1.5 rounded-xl bg-brand-500 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-brand-600"><i data-lucide="link" class="h-4 w-4"></i>Connect Stripe</button>
+      </form>
+    </div>
+  </div>`;
+}
+
+// Generic empty state for a card body when Stripe isn't connected.
+function emptyState(title, text, returnTo = "/") {
+  return `<div class="flex flex-col items-center px-5 py-12 text-center">
+    <span class="flex h-12 w-12 items-center justify-center rounded-2xl bg-gray-50 text-ink-faint"><i data-lucide="database" class="h-6 w-6"></i></span>
+    <p class="mt-3 text-sm font-semibold text-ink">${esc(title)}</p>
+    <p class="mt-1 max-w-sm text-sm text-ink-faint">${esc(text)}</p>
+    <form method="POST" action="/connect/stripe" class="mt-4">
+      <input type="hidden" name="return" value="${esc(returnTo)}" />
+      <button type="submit" class="inline-flex items-center gap-1.5 rounded-xl bg-brand-500 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-brand-600"><i data-lucide="link" class="h-4 w-4"></i>Connect Stripe</button>
+    </form>
+  </div>`;
+}
+
 const METRIC_TONE = {
   good: "bg-brand-50 text-brand-600",
   watch: "bg-amber-50 text-amber-600",
@@ -137,7 +170,7 @@ function budgetProgress(b) {
 }
 
 module.exports = {
-  card, cardHeader, pageHeader, metricCard, statusBadge, savingsBadge,
+  card, cardHeader, pageHeader, connectStripeBanner, emptyState, metricCard, statusBadge, savingsBadge,
   priorityBadge, activityTable, sparkline, budgetProgress,
   money, moneyPerMonth, relativeDate, dateLabel, daysUntil, esc,
 };

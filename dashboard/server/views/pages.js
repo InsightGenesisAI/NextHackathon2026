@@ -2,16 +2,17 @@ const P = require("./partials");
 const { money, moneyPerMonth, relativeDate, dateLabel, daysUntil, esc } = P;
 
 // ── Home ──
-function homePage({ summary, purchases, review }) {
+function homePage({ summary, purchases, review, user }) {
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
-  const HEALTH_LABEL = { good: "Good", watch: "Watch", risk: "Risk" };
+  const HEALTH_LABEL = { good: "Good", watch: "Watch", risk: "Risk", none: "—" };
+  const connected = summary.stripeConnected;
 
   const metrics = [
-    P.metricCard({ label: "Potential Savings", value: money(summary.potentialSavingsCents), sub: "Found across your purchases", icon: "piggy-bank", tone: "good" }),
-    P.metricCard({ label: "Active Reviews", value: String(summary.activeReviews), sub: "Waiting for your okay", icon: "clipboard-check", tone: summary.activeReviews > 0 ? "watch" : "good" }),
-    P.metricCard({ label: "Budget Health", value: HEALTH_LABEL[summary.budgetHealth], sub: "Across all budgets", icon: "heart-pulse", tone: summary.budgetHealth }),
-    P.metricCard({ label: "This Month's Spend", value: money(summary.monthSpendCents), sub: `${summary.monthSpendChangePct > 0 ? "+" : ""}${summary.monthSpendChangePct}% vs last month`, icon: "receipt", tone: "neutral" }),
+    P.metricCard({ label: "Potential Savings", value: money(summary.potentialSavingsCents), sub: connected ? "Found across your purchases" : "Connect Stripe to see", icon: "piggy-bank", tone: connected ? "good" : "neutral" }),
+    P.metricCard({ label: "Active Reviews", value: String(summary.activeReviews), sub: connected ? "Waiting for your okay" : "Connect Stripe to see", icon: "clipboard-check", tone: connected && summary.activeReviews > 0 ? "watch" : connected ? "good" : "neutral" }),
+    P.metricCard({ label: "Budget Health", value: HEALTH_LABEL[summary.budgetHealth] || "—", sub: connected ? "Across all budgets" : "Connect Stripe to see", icon: "heart-pulse", tone: connected ? summary.budgetHealth : "neutral" }),
+    P.metricCard({ label: "This Month's Spend", value: money(summary.monthSpendCents), sub: connected ? `${summary.monthSpendChangePct > 0 ? "+" : ""}${summary.monthSpendChangePct}% vs last month` : "Connect Stripe to see", icon: "receipt", tone: "neutral" }),
   ].join("");
 
   const benefits = [
@@ -33,23 +34,28 @@ function homePage({ summary, purchases, review }) {
     <div class="p-5"><a href="/insights" class="flex w-full items-center justify-center gap-2 rounded-xl bg-brand-500 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-brand-600">See How It Works<i data-lucide="arrow-right" class="h-4 w-4"></i></a></div>
   </div>`;
 
+  const activityInner = connected
+    ? P.cardHeader("Recent activity", "What AgentCFO has reviewed lately.") + `<div class="mt-3">${P.activityTable(purchases)}</div>`
+    : P.cardHeader("Recent activity", "Connect Stripe to import your purchases.") + P.emptyState("No data yet", "Once you connect Stripe, your purchases and reviews show up here automatically.", "/");
+
   const body = `<div class="space-y-6">
     <div class="flex flex-wrap items-start justify-between gap-3">
       <div>
         <h1 class="text-2xl font-bold tracking-tight text-ink">${esc(greeting)}, ${esc(summary.greetingName)}!</h1>
-        <p class="mt-1 max-w-2xl text-sm text-ink-soft">AgentCFO is watching your purchases and helping you make smarter spending decisions.</p>
+        <p class="mt-1 max-w-2xl text-sm text-ink-soft">${connected ? "AgentCFO is watching your purchases and helping you make smarter spending decisions." : "Connect Stripe to bring your spending and financial data into AgentCFO."}</p>
       </div>
       <div class="flex items-center gap-2">
-        ${summary.protectionOn ? `<span class="inline-flex items-center gap-1.5 rounded-full bg-brand-50 px-3 py-1.5 text-xs font-semibold text-brand-700"><i data-lucide="shield-check" class="h-4 w-4"></i>Protection is ON</span>` : ""}
+        ${connected ? `<span class="inline-flex items-center gap-1.5 rounded-full bg-brand-50 px-3 py-1.5 text-xs font-semibold text-brand-700"><i data-lucide="shield-check" class="h-4 w-4"></i>Protection is ON</span>` : ""}
         <button onclick="window.__openDemo&&window.__openDemo()" class="inline-flex items-center gap-1.5 rounded-full bg-ink px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-ink/90"><i data-lucide="play-circle" class="h-4 w-4"></i>Demo a review</button>
       </div>
     </div>
+    ${connected ? "" : P.connectStripeBanner("/")}
     <section>
       <h2 class="mb-3 text-sm font-semibold uppercase tracking-wide text-ink-faint">Today at a glance</h2>
       <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">${metrics}</div>
     </section>
     <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
-      <div class="lg:col-span-2">${P.card(P.cardHeader("Recent activity", "What AgentCFO has reviewed lately.") + `<div class="mt-3">${P.activityTable(purchases)}</div>`)}</div>
+      <div class="lg:col-span-2">${P.card(activityInner)}</div>
       ${explainer}
     </div>
   </div>
@@ -96,12 +102,23 @@ function checkoutModal(review) {
 }
 
 // ── Purchases ──
-function purchasesPage({ purchases }) {
+function purchasesPage({ purchases, user }) {
+  const connected = user && user.stripeConnected;
+  if (!connected) {
+    return P.pageHeader("Purchases", "Everything AgentCFO has reviewed for you.") +
+      P.card(P.emptyState("No purchases yet", "Connect Stripe to import your purchase history.", "/purchases"));
+  }
   return P.pageHeader("Purchases", "Everything AgentCFO has reviewed for you.") + P.card(P.activityTable(purchases));
 }
 
 // ── Savings ──
-function savingsPage({ purchases, summary }) {
+function savingsPage({ purchases, summary, user }) {
+  const connected = user && user.stripeConnected;
+  if (!connected) {
+    return `<div class="space-y-6">${P.pageHeader("Savings", "Money AgentCFO has helped you keep.")}
+      ${P.card(P.emptyState("No savings data yet", "Connect Stripe and AgentCFO will surface savings opportunities here.", "/savings"))}
+    </div>`;
+  }
   const withSavings = purchases.filter((p) => p.savingsCents > 0);
   const realized = purchases.filter((p) => p.status === "approved").reduce((s, p) => s + p.savingsCents, 0);
   const metrics = [
@@ -123,7 +140,12 @@ function savingsPage({ purchases, summary }) {
 }
 
 // ── Insights / Financial health ──
-function insightsPage({ health }) {
+function insightsPage({ health, user }) {
+  const connected = user && user.stripeConnected;
+  if (!connected) {
+    return P.pageHeader("Your Financial Health", "Real-time snapshot of your business.") +
+      P.connectStripeBanner("/insights");
+  }
   const STATUS = {
     good: { label: "Cash flow looks good", cls: "bg-brand-50 text-brand-700", dot: "bg-brand-500" },
     watch: { label: "Worth watching", cls: "bg-amber-50 text-amber-700", dot: "bg-amber-500" },
@@ -172,7 +194,12 @@ function insightsPage({ health }) {
 }
 
 // ── Alerts ──
-function alertsPage({ purchases }) {
+function alertsPage({ purchases, user }) {
+  const connected = user && user.stripeConnected;
+  if (!connected) {
+    return P.pageHeader("Alerts", "Purchases that could use a quick look.") +
+      P.card(P.emptyState("No alerts yet", "Connect Stripe so AgentCFO can flag purchases that need a look.", "/alerts"));
+  }
   const alerts = purchases.filter((p) => p.status !== "approved");
   const body = alerts.length === 0
     ? P.card(`<div class="flex flex-col items-center px-5 py-12 text-center">
@@ -189,7 +216,12 @@ function alertsPage({ purchases }) {
 }
 
 // ── To Do ──
-function todoPage({ todos, renewals, recommended }) {
+function todoPage({ todos, renewals, recommended, user }) {
+  const connected = user && user.stripeConnected;
+  if (!connected) {
+    return P.pageHeader("What's Next?", "Here's what AgentCFO recommends.") +
+      P.card(P.emptyState("Nothing to do yet", "Connect Stripe and AgentCFO will suggest tasks, renewals, and actions.", "/todo"));
+  }
   const todoItems = todos.map((t) => `<li data-id="${t.id}" class="todo-item flex items-start gap-3 rounded-2xl border border-gray-100 bg-white p-4 shadow-soft transition-opacity">
     <button onclick="window.__toggleTodo&&window.__toggleTodo(this)" aria-label="Toggle done" class="todo-check mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-gray-300 transition-colors hover:border-brand-400">
       <svg viewBox="0 0 12 12" class="h-3 w-3 hidden" fill="none" stroke="currentColor" stroke-width="2"><path d="M2.5 6.5l2.5 2.5 4.5-5" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -358,8 +390,28 @@ function settingsPage({ user } = {}) {
 
   const companyDesc = user ? `${user.company || "Your company"} · ${user.email}` : "Acme Co · Small business plan";
 
+  // Stripe connection card — connect/disconnect the financial data source.
+  const connected = user && user.stripeConnected;
+  const stripeCard = P.card(P.cardHeader("Stripe connection", "Where AgentCFO gets your financial data.") +
+    `<div class="flex flex-wrap items-center justify-between gap-3 px-5 pb-5 pt-3">
+      <div class="flex items-center gap-3">
+        <span class="flex h-9 w-9 items-center justify-center rounded-xl ${connected ? "bg-brand-50 text-brand-600" : "bg-gray-50 text-ink-faint"}"><i data-lucide="${connected ? "check-circle" : "link"}" class="h-5 w-5"></i></span>
+        <div>
+          <p class="text-sm font-semibold text-ink">${connected ? "Connected" : "Not connected"}</p>
+          <p class="text-xs text-ink-soft">${connected ? "Your spending, budgets, and health are synced from Stripe." : "Connect Stripe to populate your dashboard."}</p>
+        </div>
+      </div>
+      <form method="POST" action="${connected ? "/disconnect/stripe" : "/connect/stripe"}">
+        <input type="hidden" name="return" value="/settings" />
+        <button type="submit" class="inline-flex items-center gap-1.5 rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors ${connected ? "border border-gray-200 text-ink-soft hover:bg-gray-50" : "bg-brand-500 text-white hover:bg-brand-600"}">
+          <i data-lucide="${connected ? "unlink" : "link"}" class="h-4 w-4"></i>${connected ? "Disconnect" : "Connect Stripe"}
+        </button>
+      </form>
+    </div>`);
+
   const body = `<div class="space-y-4">
     ${P.card(P.cardHeader("Account", "Your sign-in details.") + `<div class="space-y-1 px-5 pb-5 pt-3">${row("user", user ? user.name : "Account", user ? user.email : "—")}${row("building-2", "Company", companyDesc)}<div class="px-1 pt-2"><a href="/logout" class="inline-flex items-center gap-1.5 rounded-xl border border-gray-200 px-3.5 py-2 text-sm font-semibold text-ink-soft hover:bg-gray-50"><i data-lucide="log-out" class="h-4 w-4"></i>Sign out</a></div></div>`)}
+    ${stripeCard}
     ${profileCard}
     ${contextCard}
     ${P.card(P.cardHeader("Protection", "Let AgentCFO review purchases as they happen.") + `<div class="space-y-1 px-5 pb-5 pt-3">${row("shield-check", "Purchase protection", "Review checkouts before you buy.", toggle("protection", true))}${row("bell", "Email alerts", "Get notified when something needs a look.", toggle("alerts", true))}</div>`)}

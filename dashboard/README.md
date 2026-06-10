@@ -101,17 +101,37 @@ and extension-style (`merchant`, `amount_cents`) field names.
 ```
 server/
   index.js          # HTTP server: routing, API, static client script
-  store.js          # in-memory hub store (history + summaries)
-  mockData.js       # seed data
+  store.js          # per-user (Stripe-gated) + public-hub data getters
+  stripe.js         # the demo financial dataset that "lives in Stripe"
+  mockData.js       # demo content for the Purchase Review page
   format.js         # money/date helpers + HTML escaping
   clientScript.js   # browser JS (served from memory at /app.js)
+  auth.js           # accounts, sessions, company profile, Stripe flag
+  enrichment.js     # Exa + AI company lookup and context questions
   views/
     layout.js       # HTML shell (Tailwind CDN + Lucide)
-    partials.js     # reusable UI fragments
+    partials.js     # reusable UI fragments (incl. Stripe connect banner)
     pages.js        # per-page render functions
+    auth.js         # login / signup / onboarding views
 api/index.js        # Vercel serverless entrypoint → server handler
 vercel.json         # routes all requests to the Node handler
 ```
+
+## Stripe connection (data source)
+
+The dashboard shows **no financial data until the user connects Stripe**. The
+demo dataset lives in `server/stripe.js` (standing in for the Stripe API), and
+is gated per-user by `user.stripeConnected`:
+
+- Before connecting: every page shows an empty state / "Connect Stripe" banner
+  and metrics read zero.
+- After connecting (Settings → Stripe connection, or any "Connect Stripe"
+  button): purchases, budgets, and financial health populate from the demo
+  Stripe data. Disconnecting empties it again.
+
+The public hub API (`/api/v1/*`, the browser extension's backend) has no user
+session, so it always serves the demo Stripe data and accepts extension-reported
+purchases at runtime.
 
 > Note: the store is in-memory, so history resets on restart (and on serverless
 > cold starts). Swap `store.js` for a real database for production.
