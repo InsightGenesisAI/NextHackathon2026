@@ -239,4 +239,19 @@ async function estimateTaxes(taxProfile, financials) {
   }
 }
 
-module.exports = { estimateTaxes, DISCLAIMER };
+// Synchronous base estimate (heuristic only, no external calls) — used to
+// render the Taxes page instantly while AI recommendations stream in after.
+function baseEstimate(taxProfile, financials) {
+  if (!taxProfile) return null;
+  const h = heuristicEstimate(taxProfile, financials);
+  return {
+    source: "heuristic",
+    sources: [],
+    ...h,
+    taxableIncomeCents: taxProfile.taxableIncomeCents,
+    fiscalYear: taxProfile.fiscalYear,
+    disclaimer: DISCLAIMER,
+  };
+}
+
+module.exports = { estimateTaxes, baseEstimate, DISCLAIMER };

@@ -50,26 +50,67 @@ const CLIENT_JS = `// AgentCFO dashboard client (vanilla JS).
   window.__reviewResolve = function (mode) {
     var why = document.getElementById("why");
     var msg = document.getElementById("review-msg");
+    var trace = document.getElementById("review-trace");
     var actions = document.getElementById("review-actions");
-    function show(text, held) {
+    var id = actions ? actions.getAttribute("data-id") : null;
+
+    function show(text, tone) {
       if (!msg) return;
       msg.textContent = text;
       msg.classList.remove("hidden");
-      msg.className = "mt-3 rounded-xl px-3.5 py-2.5 text-sm " + (held ? "bg-amber-50 text-amber-700" : "bg-canvas text-ink-soft");
+      var cls = "mt-3 rounded-xl px-3.5 py-2.5 text-sm ";
+      if (tone === "held") cls += "bg-amber-50 text-amber-700";
+      else if (tone === "ok") cls += "bg-brand-50 text-brand-700";
+      else if (tone === "err") cls += "bg-rose-50 text-rose-700";
+      else cls += "bg-canvas text-ink-soft";
+      msg.className = cls;
     }
-    if (mode === "submit" && (!why || !why.value.trim())) {
-      show("Add a quick note so AgentCFO can review it.", false);
+
+    function renderTrace(steps) {
+      if (!trace || !steps || !steps.length) return;
+      trace.classList.remove("hidden");
+      trace.innerHTML = '<p class="mb-1 text-xs font-semibold uppercase tracking-wide text-ink-faint">CFO Auditor · re-evaluation</p>' +
+        '<ol class="space-y-1">' + steps.map(function (s) {
+          return '<li class="text-sm text-ink-soft">' + String(s).replace(/</g, "&lt;") + '</li>';
+        }).join("") + '</ol>';
+    }
+
+    if (mode === "decline") {
+      show("Sending decline to the CFO ledger…", null);
+      fetch("/review/resolve", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: id, action: "decline" }) })
+        .then(function (r) { return r.json(); })
+        .then(function (d) { finish(false, d.message || "Purchase declined."); })
+        .catch(function () { finish(false, "Purchase declined (offline)."); });
       return;
     }
-    var resultText = mode === "decline" ? "Purchase cancelled." : "Approved. You can continue checkout.";
-    if (actions) {
-      var ok = mode !== "decline";
+
+    // mode === "submit": real human-in-the-loop re-evaluation.
+    if (!why || !why.value.trim()) {
+      show("Add a justification so the CFO Auditor can re-evaluate.", "err");
+      return;
+    }
+    show("CFO Auditor is re-evaluating your justification…", null);
+    fetch("/review/justify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: id, justification: why.value.trim() }) })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        renderTrace(d.chain_of_thought);
+        if (d.approved) {
+          show(d.reasoning || "Override approved — releasing the purchase.", "ok");
+          setTimeout(function () { finish(true, d.reasoning || "Approved — purchase released."); }, 600);
+        } else {
+          show(d.reasoning || "Justification insufficient — purchase stays flagged.", "held");
+        }
+      })
+      .catch(function () { show("Could not reach the auditor. Try again.", "err"); });
+
+    function finish(ok, text) {
+      if (!actions) return;
       actions.innerHTML =
-        '<div class="flex items-center gap-3 rounded-2xl p-1">' +
+        '<div class="flex items-center gap-3">' +
           '<span class="flex h-10 w-10 items-center justify-center rounded-xl ' + (ok ? "bg-brand-500 text-white" : "bg-gray-200 text-ink-soft") + '">' +
             '<i data-lucide="' + (ok ? "check" : "x") + '" class="h-5 w-5"></i></span>' +
-          '<div><p class="text-sm font-semibold ' + (ok ? "text-brand-800" : "text-ink-soft") + '">' + (ok ? "All set!" : "Purchase cancelled") + '</p>' +
-          '<p class="text-sm text-ink-soft">' + resultText + '</p></div>' +
+          '<div><p class="text-sm font-semibold ' + (ok ? "text-brand-800" : "text-ink-soft") + '">' + (ok ? "Override approved" : "Purchase declined") + '</p>' +
+          '<p class="text-sm text-ink-soft">' + String(text).replace(/</g, "&lt;") + '</p></div>' +
         '</div>';
       refreshIcons();
     }
@@ -131,6 +172,70 @@ const CLIENT_JS = `// AgentCFO dashboard client (vanilla JS).
   document.addEventListener("keydown", function (e) {
     if (e.key === "Escape") { window.__closeDemo(); window.__closeAudit(); }
   });
+
+  // ── Purchases filter (All / Subscriptions / One-time) ──
+  function applyPurchaseFilter(filter) {
+    var rows = document.querySelectorAll(".purchase-row");
+    var visible = 0;
+    rows.forEach(function (r) {
+      var match = filter === "all" || r.getAttribute("data-type") === filter;
+      r.style.display = match ? "" : "none";
+      if (match) visible++;
+    });
+    var empty = document.getElementById("purchases-empty");
+    if (empty) empty.classList.toggle("hidden", visible !== 0);
+  }
+  window.__filterPurchases = function (btn) {
+    var filter = btn.getAttribute("data-filter");
+    var tabs = document.getElementById("purchases-tabs");
+    if (tabs) tabs.setAttribute("data-active", filter);
+    document.querySelectorAll(".purchases-tab").forEach(function (t) {
+      var on = t.getAttribute("data-filter") === filter;
+      t.classList.toggle("bg-brand-500", on);
+      t.classList.toggle("text-white", on);
+      t.classList.toggle("border-brand-500", on);
+      t.classList.toggle("border-white/70", !on);
+      t.classList.toggle("bg-white/60", !on);
+      t.classList.toggle("text-ink-soft", !on);
+    });
+    applyPurchaseFilter(filter);
+  };
+  // Initialize default tab styling on load.
+  (function () {
+    var tabs = document.querySelectorAll(".purchases-tab");
+    if (tabs.length) {
+      tabs.forEach(function (t) {
+        var on = t.getAttribute("data-filter") === "all";
+        t.classList.add(on ? "bg-brand-500" : "border-white/70", on ? "text-white" : "bg-white/60");
+        if (on) t.classList.add("border-brand-500"); else t.classList.add("text-ink-soft");
+      });
+    }
+  })();
+
+  // ── Taxes: stream AI recommendations after the page paints ──
+  function fmtMoney(cents) {
+    return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format((cents || 0) / 100);
+  }
+  (function () {
+    var loading = document.getElementById("tips-loading");
+    var content = document.getElementById("tips-content");
+    if (!loading || !content) return;
+    fetch("/taxes/recommendations")
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        var tips = (d && d.efficiencyTips) || [];
+        if (!tips.length) { loading.innerHTML = '<p class="text-sm text-ink-faint">No additional recommendations right now.</p>'; return; }
+        content.innerHTML = tips.map(function (t) {
+          var badge = t.estAnnualSavingCents > 0 ? '<span class="shrink-0 rounded-full bg-brand-50 px-2.5 py-1 text-xs font-semibold text-brand-700">~' + fmtMoney(t.estAnnualSavingCents) + '/yr</span>' : "";
+          return '<div class="animate-soft-in rounded-2xl border border-white/70 bg-white p-4 shadow-soft"><div class="flex items-start justify-between gap-3"><div><p class="text-sm font-semibold text-ink">' + esc(t.title) + '</p><p class="mt-1 text-sm text-ink-soft">' + esc(t.detail) + '</p></div>' + badge + '</div></div>';
+        }).join("");
+        loading.classList.add("hidden");
+        content.classList.remove("hidden");
+        refreshIcons();
+      })
+      .catch(function () { loading.innerHTML = '<p class="text-sm text-ink-faint">Could not load recommendations.</p>'; });
+    function esc(s) { return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+  })();
 })();
 `;
 

@@ -51,6 +51,11 @@ const DEMO_PURCHASES = [
   { id: "p20", vendor: "Workday", item: "Workday — HCM & Financials", priceCents: 18000000, billing: "monthly", status: "approved", savingsCents: 0, date: "2026-06-01T13:30:00Z", icon: "🗂️" },
   { id: "p21", vendor: "Ramp", item: "Ramp — Corporate cards & spend", priceCents: 3000000, billing: "monthly", status: "approved", savingsCents: 0, date: "2026-05-31T15:12:00Z", icon: "💳" },
   { id: "p22", vendor: "Miro", item: "Miro Enterprise (whiteboarding)", priceCents: 2600000, billing: "monthly", status: "approved", savingsCents: 0, date: "2026-05-30T10:00:00Z", icon: "🧠" },
+  { id: "p23", vendor: "Apple", item: "MacBook Pro 16-inch fleet (40 units)", priceCents: 13600000, billing: "one-time", status: "review", savingsCents: 1800000, date: "2026-05-29T11:30:00Z", icon: "💻" },
+  { id: "p24", vendor: "Herman Miller", item: "Aeron chairs (HQ refit, 120 units)", priceCents: 18000000, billing: "one-time", status: "flagged", savingsCents: 4200000, date: "2026-05-28T14:10:00Z", icon: "🪑" },
+  { id: "p25", vendor: "Dell", item: "Server hardware — edge cache nodes", priceCents: 9400000, billing: "one-time", status: "approved", savingsCents: 0, date: "2026-05-27T09:00:00Z", icon: "🖥️" },
+  { id: "p26", vendor: "WeWork", item: "Offsite event space (one-time booking)", priceCents: 2200000, billing: "one-time", status: "approved", savingsCents: 0, date: "2026-05-26T16:45:00Z", icon: "🏢" },
+  { id: "p27", vendor: "Gartner", item: "Market research report (annual license)", priceCents: 4500000, billing: "one-time", status: "review", savingsCents: 900000, date: "2026-05-25T10:20:00Z", icon: "📊" },
 ];
 
 // ── Financial health (company cash + departmental budgets, monthly view) ──

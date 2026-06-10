@@ -23,6 +23,11 @@ function getRecentPurchasesForUser(user, limit = 20) {
     .slice(0, limit);
 }
 
+// Find a single purchase by id (for the audit/review flow).
+function getPurchaseForUser(user, id) {
+  return stripe.getPurchases(user).find((p) => p.id === id) || null;
+}
+
 function getFinancialHealthForUser(user) {
   return stripe.getFinancialHealth(user);
 }
@@ -114,6 +119,7 @@ function hubActions() {
 module.exports = {
   // dashboard (per-user, Stripe-gated)
   getRecentPurchasesForUser,
+  getPurchaseForUser,
   getFinancialHealthForUser,
   getActionsForUser,
   getFinancialsForUser,

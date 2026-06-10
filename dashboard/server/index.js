@@ -20,6 +20,7 @@ const auth = require("./auth");
 const authViews = require("./views/auth");
 const enrichment = require("./enrichment");
 const tax = require("./taxengine");
+const audit = require("./auditengine");
 
 const PORT = process.env.PORT || 3000;
 
@@ -98,7 +99,7 @@ function renderPage(pathname, user) {
         body: pages.homePage({ summary: store.getDashboardSummaryForUser(user), purchases: store.getRecentPurchasesForUser(user), review: mockReview, user }) });
     case "/purchases":
       return layout({ title: "Purchases — AgentCFO", pathname, user, extraScript: SCRIPT_TAG,
-        body: pages.purchasesPage({ purchases: store.getRecentPurchasesForUser(user), user }) });
+        body: pages.purchasesPage({ purchases: store.getRecentPurchasesForUser(user, 100), user }) });
     case "/savings":
       return layout({ title: "Savings — AgentCFO", pathname, user, extraScript: SCRIPT_TAG,
         body: pages.savingsPage({ purchases: store.getRecentPurchasesForUser(user), summary: store.getDashboardSummaryForUser(user), user }) });
@@ -111,9 +112,6 @@ function renderPage(pathname, user) {
     case "/todo":
       return layout({ title: "To Do — AgentCFO", pathname, user, extraScript: SCRIPT_TAG,
         body: pages.todoPage({ ...store.getActionsForUser(user), user }) });
-    case "/review":
-      return layout({ title: "Purchase Review — AgentCFO", pathname, user, extraScript: SCRIPT_TAG,
-        body: pages.reviewPage({ review: mockReview, activity: mockAgentActivity }) });
     case "/financials":
       return layout({ title: "Financials — AgentCFO", pathname, user, extraScript: SCRIPT_TAG,
         body: pages.financialsPage({ financials: store.getFinancialsForUser(user), user }) });
@@ -248,6 +246,49 @@ async function handleAuth(req, res, pathname) {
     return true;
   }
 
+  // Streamed AI tax recommendations (full Exa+AI estimate) for the Taxes page.
+  if (req.method === "GET" && pathname === "/taxes/recommendations") {
+    const user = auth.userFromRequest(req);
+    if (!user) { sendJson(res, 401, { error: "Not signed in" }); return true; }
+    const financials = store.getFinancialsForUser(user);
+    const taxProfile = store.getTaxProfileForUser(user);
+    if (!taxProfile) { sendJson(res, 200, { source: "none", efficiencyTips: [] }); return true; }
+    const estimate = await tax.estimateTaxes(taxProfile, financials);
+    sendJson(res, 200, {
+      source: estimate.source,
+      jurisdictionLabel: estimate.jurisdictionLabel,
+      efficiencyTips: estimate.efficiencyTips || [],
+      sources: estimate.sources || [],
+    });
+    return true;
+  }
+
+  // Submit a justification for a flagged purchase → real HITL re-evaluation.
+  if (req.method === "POST" && pathname === "/review/justify") {
+    const user = auth.userFromRequest(req);
+    if (!user) { sendJson(res, 401, { error: "Not signed in" }); return true; }
+    let body;
+    try { body = await readBody(req); }
+    catch (e) { sendJson(res, 400, { error: e.message }); return true; }
+    const purchase = store.getPurchaseForUser(user, body.id);
+    if (!purchase) { sendJson(res, 404, { error: "Purchase not found" }); return true; }
+    const result = await audit.auditPurchase(purchase, store.getFinancialHealthForUser(user));
+    const verdict = await audit.reevaluate(result.cart, result.signals, { runwayMonths: store.getFinancialHealthForUser(user).runwayMonths }, body.justification || "");
+    sendJson(res, 200, verdict);
+    return true;
+  }
+
+  // Resolve (decline) a flagged purchase.
+  if (req.method === "POST" && pathname === "/review/resolve") {
+    const user = auth.userFromRequest(req);
+    if (!user) { sendJson(res, 401, { error: "Not signed in" }); return true; }
+    let body;
+    try { body = await readBody(req); }
+    catch (e) { sendJson(res, 400, { error: e.message }); return true; }
+    sendJson(res, 200, { success: true, action: body.action || "decline", message: body.action === "decline" ? "Purchase declined and logged to the CFO ledger." : "Resolved." });
+    return true;
+  }
+
   // Save company-profile edits from Settings (requires a session).
   if (req.method === "POST" && pathname === "/settings/company") {
     const user = auth.userFromRequest(req);
@@ -360,14 +401,33 @@ async function handler(req, res) {
         if (!user.profileComplete) return redirect(res, "/onboarding");
       }
 
-      // Taxes page runs an async estimate (Exa + AI, with heuristic fallback).
+      // Taxes page: render the financial breakdown instantly (heuristic base),
+      // then stream AI recommendations in via /taxes/recommendations.
       if (pathname === "/taxes") {
         const financials = store.getFinancialsForUser(user);
         const taxProfile = store.getTaxProfileForUser(user);
-        const estimate = taxProfile ? await tax.estimateTaxes(taxProfile, financials) : null;
+        const base = taxProfile ? tax.baseEstimate(taxProfile, financials) : null;
         return sendHtml(res, 200, layout({
           title: "Taxes — AgentCFO", pathname, user, extraScript: SCRIPT_TAG,
-          body: pages.taxesPage({ estimate, financials, user }),
+          body: pages.taxesPage({ estimate: base, financials, user, pending: !!base }),
+        }));
+      }
+
+      // Review page runs a real purchase through the APE audit pipeline.
+      if (pathname === "/review") {
+        const id = url.searchParams.get("id");
+        const purchases = store.getRecentPurchasesForUser(user, 50);
+        // Default to the first flagged/review purchase if no id is given.
+        const purchase = (id && store.getPurchaseForUser(user, id)) ||
+          purchases.find((p) => p.status === "flagged" || p.status === "review") ||
+          purchases[0] || null;
+        let result = null;
+        if (purchase) {
+          result = await audit.auditPurchase(purchase, store.getFinancialHealthForUser(user));
+        }
+        return sendHtml(res, 200, layout({
+          title: "Purchase Review — AgentCFO", pathname, user, extraScript: SCRIPT_TAG,
+          body: pages.reviewPage({ purchase, audit: result, user }),
         }));
       }
 

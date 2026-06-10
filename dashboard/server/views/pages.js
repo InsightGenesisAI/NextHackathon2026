@@ -108,7 +108,19 @@ function purchasesPage({ purchases, user }) {
     return P.pageHeader("Purchases", "Everything AgentCFO has reviewed for you.") +
       P.card(P.emptyState("No purchases yet", "Connect Stripe to import your purchase history.", "/purchases"));
   }
-  return P.pageHeader("Purchases", "Everything AgentCFO has reviewed for you.") + P.card(P.activityTable(purchases));
+
+  const subs = purchases.filter((p) => p.billing !== "one-time");
+  const oneTime = purchases.filter((p) => p.billing === "one-time");
+
+  const tab = (key, label, count) => `<button data-filter="${key}" onclick="window.__filterPurchases&&window.__filterPurchases(this)" class="purchases-tab inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-sm font-semibold transition-all">${label}<span class="rounded-full bg-black/5 px-1.5 text-xs">${count}</span></button>`;
+
+  const tabs = `<div id="purchases-tabs" class="mb-4 flex flex-wrap gap-2" data-active="all">
+    ${tab("all", "All", purchases.length)}
+    ${tab("subscription", "Subscriptions", subs.length)}
+    ${tab("one-time", "One-time", oneTime.length)}
+  </div>`;
+
+  return P.pageHeader("Purchases", "Everything AgentCFO has reviewed for you.") + tabs + P.card(P.activityTable(purchases, { filterable: true }));
 }
 
 // ── Savings ──
@@ -210,7 +222,7 @@ function alertsPage({ purchases, user }) {
     : `<ul class="space-y-3">${alerts.map((p) => `<li class="flex items-center gap-3 rounded-2xl border border-gray-100 bg-white p-4 shadow-soft">
         <span class="flex h-10 w-10 items-center justify-center rounded-xl ${p.status === "flagged" ? "bg-rose-50 text-rose-600" : "bg-amber-50 text-amber-600"}"><i data-lucide="alert-circle" class="h-5 w-5"></i></span>
         <div class="min-w-0 flex-1"><p class="text-sm font-semibold text-ink">${esc(p.item)}</p><p class="text-xs text-ink-faint">${esc(p.vendor)} · ${moneyPerMonth(p.priceCents, p.billing)} · ${relativeDate(p.date)}</p></div>
-        <a href="/review" class="inline-flex items-center gap-1.5 rounded-xl bg-brand-500 px-3.5 py-2 text-sm font-semibold text-white hover:bg-brand-600">Review<i data-lucide="arrow-right" class="h-4 w-4"></i></a>
+        <a href="/review?id=${esc(p.id)}" class="inline-flex items-center gap-1.5 rounded-xl bg-brand-500 px-3.5 py-2 text-sm font-semibold text-white hover:bg-brand-600">Review<i data-lucide="arrow-right" class="h-4 w-4"></i></a>
       </li>`).join("")}</ul>`;
   return P.pageHeader("Alerts", "Purchases that could use a quick look.") + body;
 }
@@ -257,75 +269,110 @@ function todoPage({ todos, renewals, recommended, user }) {
   </div>`;
 }
 
-// ── Review ──
-function reviewPage({ review, activity }) {
-  const best = review.alternatives.reduce((m, a) => Math.max(m, a.estSavingsCents), review.estSavingsCents);
-  const alts = review.alternatives.map((alt) => `<div class="rounded-2xl border bg-white p-5 shadow-soft transition-shadow hover:shadow-card ${alt.badge ? "border-brand-200" : "border-gray-100"}">
-    <div class="flex items-start justify-between gap-3">
-      <div>
-        <div class="flex items-center gap-2"><h3 class="text-base font-semibold text-ink">${esc(alt.name)}</h3>${alt.badge ? `<span class="inline-flex items-center gap-1 rounded-full bg-brand-50 px-2 py-0.5 text-xs font-semibold text-brand-700"><i data-lucide="star" class="h-3 w-3"></i>${esc(alt.badge)}</span>` : ""}</div>
-        <p class="mt-0.5 text-sm text-ink-soft">${moneyPerMonth(alt.priceCents, alt.billing)}</p>
-      </div>
-      ${alt.estSavingsCents > 0 ? `<div class="text-right"><p class="text-xs text-ink-faint">You could save</p><p class="text-lg font-bold text-brand-600">${money(alt.estSavingsCents)}</p></div>` : ""}
-    </div>
-    <p class="mt-3 text-sm text-ink-soft">${esc(alt.reason)}</p>
-    <ul class="mt-3 grid grid-cols-2 gap-x-3 gap-y-1.5">${alt.features.map((f) => `<li class="flex items-center gap-1.5 text-xs text-ink-soft"><i data-lucide="check" class="h-3.5 w-3.5 text-brand-500"></i>${esc(f)}</li>`).join("")}</ul>
-    <a href="${esc(alt.url || "#")}" ${alt.url ? 'target="_blank" rel="noreferrer"' : ""} class="mt-4 inline-flex items-center justify-center gap-1.5 rounded-xl border border-brand-200 bg-brand-50 px-4 py-2 text-sm font-semibold text-brand-700 transition-colors hover:bg-brand-100">View Option<i data-lucide="arrow-up-right" class="h-4 w-4"></i></a>
-  </div>`).join("");
+// ── Review (live APE audit) ──
+// Renders the real verdict from the signature audit pipeline for one purchase.
+function reviewPage({ purchase, audit, user }) {
+  const connected = user && user.stripeConnected;
+  if (!connected) {
+    return P.pageHeader("Purchase review", "Run a purchase through AgentCFO's audit.") +
+      P.connectStripeBanner("/alerts");
+  }
+  if (!purchase || !audit) {
+    return P.pageHeader("Purchase review", "Run a purchase through AgentCFO's audit.") +
+      P.card(P.emptyState("Nothing to review", "Pick a flagged purchase from Alerts to run the audit.", "/alerts"));
+  }
+
+  const v = audit.verdict || {};
+  const signals = audit.signals || {};
+  const market = audit.market || {};
+  const flagged = !!v.is_flagged;
+  const premium = signals.market_premium_percent || 0;
+  const dups = signals.stack_duplicates || [];
+  const violations = signals.policy_violations || [];
 
   const STEP_ICON = {
     done: `<span class="flex h-6 w-6 items-center justify-center rounded-full bg-brand-500 text-white"><i data-lucide="check" class="h-3.5 w-3.5"></i></span>`,
     running: `<span class="flex h-6 w-6 items-center justify-center rounded-full bg-brand-100 text-brand-600"><i data-lucide="loader" class="h-3.5 w-3.5"></i></span>`,
-    failed: `<span class="flex h-6 w-6 items-center justify-center rounded-full bg-rose-100 text-rose-600"><i data-lucide="x" class="h-3.5 w-3.5"></i></span>`,
+    failed: `<span class="flex h-6 w-6 items-center justify-center rounded-full bg-rose-100 text-rose-600"><i data-lucide="flag" class="h-3.5 w-3.5"></i></span>`,
     pending: `<span class="flex h-6 w-6 items-center justify-center rounded-full bg-gray-100 text-ink-faint"><i data-lucide="circle" class="h-2.5 w-2.5"></i></span>`,
   };
-  const steps = activity.steps.map((s, i) => `<li class="flex gap-3">
-    <div class="flex flex-col items-center">${STEP_ICON[s.status] || STEP_ICON.pending}${i < activity.steps.length - 1 ? `<span class="my-1 w-px flex-1 bg-gray-100"></span>` : ""}</div>
+  const tl = audit.timeline || { steps: [], auditLog: [] };
+  const steps = tl.steps.map((s, i) => `<li class="flex gap-3">
+    <div class="flex flex-col items-center">${STEP_ICON[s.status] || STEP_ICON.pending}${i < tl.steps.length - 1 ? `<span class="my-1 w-px flex-1 bg-gray-100"></span>` : ""}</div>
     <div class="flex-1 pb-3"><div class="flex items-center justify-between gap-2"><p class="text-sm font-semibold text-ink"><span class="text-brand-600">${esc(s.actor)}</span> · ${esc(s.label)}</p>${typeof s.ms === "number" ? `<span class="shrink-0 text-xs text-ink-faint">${s.ms}ms</span>` : ""}</div>${s.result ? `<p class="mt-0.5 text-sm text-ink-soft">${esc(s.result)}</p>` : ""}</div>
   </li>`).join("");
 
-  const auditEntries = activity.auditLog.map((e, i) => `<li class="flex gap-3 rounded-xl bg-canvas p-3"><span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-500 text-xs font-semibold text-white">${i + 1}</span><p class="text-sm text-ink">${esc(e.step)}</p></li>`).join("");
+  const auditEntries = tl.auditLog.map((e, i) => `<li class="flex gap-3 rounded-xl bg-canvas p-3"><span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-500 text-xs font-semibold text-white">${i + 1}</span><p class="text-sm text-ink">${esc(e.step)}</p></li>`).join("");
 
-  const action = `<button onclick="window.__openAudit&&window.__openAudit()" class="inline-flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3.5 py-2 text-sm font-semibold text-ink-soft hover:bg-gray-50"><i data-lucide="list-checks" class="h-4 w-4"></i>View audit log</button>`;
+  // Three intelligence capsules (Market / Financial / Company), like the extension.
+  const analysisLines = (v.concise_analysis || "").split("\n").filter((l) => l.trim());
+  const capsule = (icon, label, body, tone) => `<div class="rounded-2xl border ${tone} p-4">
+    <div class="flex items-center gap-2"><i data-lucide="${icon}" class="h-4 w-4"></i><p class="text-xs font-semibold uppercase tracking-wide">${esc(label)}</p></div>
+    <p class="mt-1.5 text-sm">${esc(body)}</p>
+  </div>`;
+
+  const marketBody = premium > 0 ? `Pricing is about ${premium}% above benchmark (${market.mode || "scan"}).` : "Pricing looks within normal market range.";
+  const finBody = signals.department_projected_utilization_percent > 100
+    ? `This would push the department budget to ${Math.round(signals.department_projected_utilization_percent)}% of its quarterly cap.`
+    : `Cash runway ~${signals.cash_runway_months} months; budget impact manageable.`;
+  const companyBody = dups.length ? `${dups[0].unused_seats} unused ${dups[0].existing_tool} licenses already available in the same category.` : "No redundant tooling found in the Stack Registry.";
+
+  const sourceLinks = (market.sources || []).filter((s) => s.url).slice(0, 3)
+    .map((s) => `<a href="${esc(s.url)}" target="_blank" rel="noreferrer" class="underline hover:text-ink-soft">${esc(s.title || s.url)}</a>`).join(" · ");
+
+  const statusBanner = flagged
+    ? `<div class="rounded-2xl border border-rose-100 bg-rose-50 p-5"><div class="flex items-start gap-3"><span class="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-rose-600 shadow-soft"><i data-lucide="shield-alert" class="h-5 w-5"></i></span><div class="flex-1"><p class="text-xs font-semibold uppercase tracking-wide text-rose-700">Flagged by AgentCFO</p><h3 class="mt-0.5 text-base font-semibold text-ink">${esc(purchase.item)}</h3><p class="text-sm text-ink-soft">${esc(purchase.vendor)} · ${moneyPerMonth(purchase.priceCents, purchase.billing)}</p></div></div></div>`
+    : `<div class="rounded-2xl border border-brand-100 bg-brand-50 p-5"><div class="flex items-start gap-3"><span class="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-brand-600 shadow-soft"><i data-lucide="shield-check" class="h-5 w-5"></i></span><div class="flex-1"><p class="text-xs font-semibold uppercase tracking-wide text-brand-700">Cleared by AgentCFO</p><h3 class="mt-0.5 text-base font-semibold text-ink">${esc(purchase.item)}</h3><p class="text-sm text-ink-soft">${esc(purchase.vendor)} · ${moneyPerMonth(purchase.priceCents, purchase.billing)}</p></div></div></div>`;
+
+  const violationList = violations.length
+    ? `<div class="rounded-2xl border border-amber-100 bg-amber-50/60 p-4"><p class="text-xs font-semibold uppercase tracking-wide text-amber-700">Policy violations</p><ul class="mt-2 space-y-1.5">${violations.map((vi) => `<li class="text-sm text-ink"><span class="font-medium">${esc(vi.rule_id)}:</span> ${esc(vi.detail || vi.description)}</li>`).join("")}</ul></div>`
+    : "";
+
+  const question = v.missing_context_question || "Provide business justification for this purchase.";
 
   const reviewCard = `<div class="space-y-5">
-    <div class="rounded-2xl border border-amber-100 bg-amber-50/60 p-5">
-      <div class="flex items-start gap-3">
-        <span class="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-amber-600 shadow-soft"><i data-lucide="alert-circle" class="h-5 w-5"></i></span>
-        <div class="flex-1"><p class="text-xs font-semibold uppercase tracking-wide text-amber-700">Worth reviewing</p><h3 class="mt-0.5 text-base font-semibold text-ink">${esc(review.item)}</h3><p class="text-sm text-ink-soft">${esc(review.vendor)} · ${moneyPerMonth(review.currentPriceCents, review.billing)}</p><p class="mt-2 text-sm text-ink">${esc(review.flagReason)}</p></div>
-      </div>
+    ${statusBanner}
+    <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      ${capsule("trending-up", "Market (Exa)", marketBody, premium >= 10 ? "border-rose-100 bg-rose-50/50 text-rose-800" : "border-gray-100 bg-white text-ink-soft")}
+      ${capsule("wallet", "Financial (Stripe)", finBody, "border-gray-100 bg-white text-ink-soft")}
+      ${capsule("building-2", "Company (DNA)", companyBody, dups.length ? "border-amber-100 bg-amber-50/50 text-amber-800" : "border-gray-100 bg-white text-ink-soft")}
     </div>
-    <div><h3 class="mb-3 text-sm font-semibold text-ink">Better options we found</h3><div class="space-y-3">${alts}</div></div>
-    <div class="flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-brand-500 px-5 py-4 text-white">
-      <p class="text-sm">Original: <span class="font-semibold">${esc(review.item)}</span> at ${moneyPerMonth(review.currentPriceCents, review.billing)}</p>
-      <p class="text-sm font-semibold">You could save up to ${money(best)}/mo</p>
+    ${violationList}
+    <div class="rounded-2xl border border-gray-100 bg-white p-5 shadow-card">
+      <p class="text-xs font-semibold uppercase tracking-wide text-ink-faint">AgentCFO analysis</p>
+      <div class="mt-2 space-y-1.5">${analysisLines.map((l, i) => `<p class="text-sm ${i === 0 ? "font-semibold text-ink" : "text-ink-soft"}">${esc(l)}</p>`).join("")}</div>
+      ${sourceLinks ? `<p class="mt-3 text-xs text-ink-faint"><span class="font-semibold">Sources:</span> ${sourceLinks}</p>` : ""}
     </div>
-    <div id="review-actions" class="rounded-2xl border border-gray-100 bg-white p-5 shadow-card">
-      <label for="why" class="text-sm font-medium text-ink">${esc(review.contextQuestion)}</label>
-      <textarea id="why" rows="3" placeholder="Why do you need this specific option?" class="mt-2 w-full resize-none rounded-xl border border-gray-200 bg-canvas px-3.5 py-3 text-sm text-ink outline-none transition-colors placeholder:text-ink-faint focus:border-brand-300 focus:bg-white"></textarea>
+    <div id="review-actions" class="rounded-2xl border border-gray-100 bg-white p-5 shadow-card" data-id="${esc(purchase.id)}">
+      <label for="why" class="text-sm font-medium text-ink">${esc(question)}</label>
+      <textarea id="why" rows="3" placeholder="Explain the business need (e.g. 'Load testing for the Q3 launch — temporary capacity')." class="mt-2 w-full resize-none rounded-xl border border-gray-200 bg-canvas px-3.5 py-3 text-sm text-ink outline-none transition-colors placeholder:text-ink-faint focus:border-brand-300 focus:bg-white"></textarea>
       <p id="review-msg" class="mt-3 hidden rounded-xl px-3.5 py-2.5 text-sm bg-canvas text-ink-soft"></p>
+      <div id="review-trace" class="mt-3 hidden"></div>
       <div class="mt-4 flex flex-wrap gap-3">
-        <button onclick="window.__reviewResolve&&window.__reviewResolve('decline')" class="inline-flex items-center gap-1.5 rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-semibold text-ink-soft transition-colors hover:bg-gray-50"><i data-lucide="x" class="h-4 w-4"></i>Cancel Purchase</button>
-        <button onclick="window.__reviewResolve&&window.__reviewResolve('submit')" class="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-brand-500 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-brand-600 sm:flex-none"><i data-lucide="file-text" class="h-4 w-4"></i>Submit Justification</button>
-        <button onclick="window.__reviewResolve&&window.__reviewResolve('continue')" class="inline-flex items-center gap-1.5 rounded-xl px-4 py-2.5 text-sm font-semibold text-ink-soft transition-colors hover:bg-gray-50">Continue Anyway</button>
+        <button onclick="window.__reviewResolve&&window.__reviewResolve('decline')" class="inline-flex items-center gap-1.5 rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-semibold text-ink-soft transition-colors hover:bg-gray-50"><i data-lucide="x" class="h-4 w-4"></i>Decline & cancel</button>
+        <button onclick="window.__reviewResolve&&window.__reviewResolve('submit')" class="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-brand-500 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-brand-600 sm:flex-none"><i data-lucide="file-text" class="h-4 w-4"></i>Submit justification to CFO</button>
       </div>
     </div>
   </div>`;
 
-  const timeline = P.card(`<div class="px-5 py-4"><h2 class="text-base font-semibold text-ink">How AgentCFO decided</h2><p class="text-sm text-ink-soft">A quick look at the steps behind this recommendation.</p></div><ol class="space-y-1 px-5 pb-5">${steps}</ol>`);
+  const action = `<button onclick="window.__openAudit&&window.__openAudit()" class="inline-flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3.5 py-2 text-sm font-semibold text-ink-soft hover:bg-gray-50"><i data-lucide="list-checks" class="h-4 w-4"></i>View audit log</button>`;
+
+  const timeline = P.card(`<div class="px-5 py-4"><h2 class="text-base font-semibold text-ink">How AgentCFO decided</h2><p class="text-sm text-ink-soft">Live trace from the procurement audit pipeline.</p></div><ol class="space-y-1 px-5 pb-5">${steps}</ol>`);
 
   const drawer = `<div id="audit-drawer" class="fixed inset-0 z-50 hidden justify-end">
     <div class="absolute inset-0 bg-ink/20" onclick="window.__closeAudit&&window.__closeAudit()"></div>
     <aside class="thin-scroll relative flex h-full w-full max-w-md flex-col overflow-y-auto bg-white shadow-pop animate-soft-in">
       <div class="flex items-center justify-between border-b border-gray-100 px-5 py-4">
-        <div class="flex items-center gap-2"><span class="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-50 text-brand-600"><i data-lucide="list-checks" class="h-4 w-4"></i></span><div><h3 class="text-sm font-semibold text-ink">Audit log</h3><p class="text-xs text-ink-faint">What AgentCFO checked, in plain English.</p></div></div>
+        <div class="flex items-center gap-2"><span class="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-50 text-brand-600"><i data-lucide="list-checks" class="h-4 w-4"></i></span><div><h3 class="text-sm font-semibold text-ink">Audit log · chain of thought</h3><p class="text-xs text-ink-faint">Each step the auditor took before deciding.</p></div></div>
         <button onclick="window.__closeAudit&&window.__closeAudit()" class="flex h-8 w-8 items-center justify-center rounded-lg text-ink-faint hover:bg-gray-50" aria-label="Close audit log"><i data-lucide="x" class="h-4 w-4"></i></button>
       </div>
       <ol class="space-y-3 px-5 py-5">${auditEntries}</ol>
     </aside>
   </div>`;
 
-  return P.pageHeader("Better alternatives found!", "We found similar options that can save your business money.", action) + `<div class="grid grid-cols-1 gap-6 lg:grid-cols-3"><div class="lg:col-span-2">${reviewCard}</div><div class="space-y-6">${timeline}</div></div>${drawer}`;
+  const title = flagged ? "AgentCFO flagged this purchase" : "AgentCFO reviewed this purchase";
+  const subtitle = flagged ? "Here's what the audit found and what it needs from you." : "The audit cleared it — here's the reasoning.";
+  return P.pageHeader(title, subtitle, action) + `<div class="grid grid-cols-1 gap-6 lg:grid-cols-3"><div class="lg:col-span-2">${reviewCard}</div><div class="space-y-6">${timeline}</div></div>${drawer}`;
 }
 
 // ── Settings (static + client toggles) ──
@@ -491,7 +538,7 @@ function financialsPage({ financials, user }) {
 }
 
 // ── Taxes ──
-function taxesPage({ estimate, financials, user }) {
+function taxesPage({ estimate, financials, user, pending }) {
   const connected = user && user.stripeConnected;
   if (!connected) {
     return P.pageHeader("Taxes", "Estimated taxes and ways to improve efficiency.") +
@@ -522,12 +569,24 @@ function taxesPage({ estimate, financials, user }) {
     <td class="px-4 py-2.5 text-right text-sm font-semibold text-ink">${money(c.estTaxCents)}</td>
   </tr>`).join("");
 
-  const tips = (e.efficiencyTips || []).map((t) => `<div class="rounded-2xl border border-gray-100 bg-white p-4 shadow-soft">
+  const tipsContent = (e.efficiencyTips || []).map((t) => `<div class="rounded-2xl border border-white/70 bg-white p-4 shadow-soft">
     <div class="flex items-start justify-between gap-3">
       <div><p class="text-sm font-semibold text-ink">${esc(t.title)}</p><p class="mt-1 text-sm text-ink-soft">${esc(t.detail)}</p></div>
       ${t.estAnnualSavingCents > 0 ? `<span class="shrink-0 rounded-full bg-brand-50 px-2.5 py-1 text-xs font-semibold text-brand-700">~${money(t.estAnnualSavingCents)}/yr</span>` : ""}
     </div>
   </div>`).join("");
+
+  // When `pending`, the financials render instantly and the AI recommendations
+  // stream in afterward (the client fetches /taxes/recommendations).
+  const tipsSection = pending
+    ? `<div id="tips-loading" class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+         ${[0, 1, 2, 3].map(() => `<div class="rounded-2xl border border-white/70 bg-white/60 p-4 shadow-soft">
+           <div class="flex items-center gap-2"><span class="h-4 w-4 rounded-full border-2 border-brand-200 border-t-brand-500 ape-spin"></span><span class="text-sm font-medium text-ink-soft">Analyzing with Exa + AI…</span></div>
+           <div class="mt-3 space-y-2"><div class="h-2.5 w-3/4 rounded-full bg-black/5"></div><div class="h-2.5 w-1/2 rounded-full bg-black/5"></div></div>
+         </div>`).join("")}
+       </div>
+       <div id="tips-content" class="hidden grid grid-cols-1 gap-3 sm:grid-cols-2"></div>`
+    : `<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">${tipsContent}</div>`;
 
   const itemNotes = (e.itemNotes || []).map((n) => `<li class="flex items-start gap-2 py-2"><i data-lucide="info" class="mt-0.5 h-4 w-4 shrink-0 text-ink-faint"></i><span class="text-sm text-ink-soft"><span class="font-medium text-ink">${esc(n.item)}:</span> ${esc(n.note)}</span></li>`).join("");
 
@@ -535,13 +594,17 @@ function taxesPage({ estimate, financials, user }) {
     ? `<div class="mt-3 text-xs text-ink-faint"><span class="font-semibold">Sources:</span> ${e.sources.map((s) => `<a href="${esc(s.url)}" target="_blank" rel="noreferrer" class="underline hover:text-ink-soft">${esc(s.title || s.url)}</a>`).join(" · ")}</div>`
     : "";
 
+  const recHeader = pending
+    ? `<h2 class="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-ink-faint"><span class="h-3.5 w-3.5 rounded-full border-2 border-brand-200 border-t-brand-500 ape-spin"></span>Tax efficiency &amp; recommendations<span class="text-[10px] font-medium normal-case text-ink-faint">loading live…</span></h2>`
+    : `<h2 class="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-ink-faint"><i data-lucide="sparkles" class="h-4 w-4"></i>Tax efficiency &amp; recommendations</h2>`;
+
   const body = `<div class="space-y-6">
     <div class="flex items-center justify-between gap-3">
       <p class="text-sm text-ink-soft">Estimated for <span class="font-semibold text-ink">${esc(e.jurisdictionLabel)}</span></p>
       ${sourceBadge}
     </div>
 
-    <div class="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3">
+    <div class="rounded-2xl border border-amber-100 bg-amber-50/80 px-4 py-3 backdrop-blur">
       <div class="flex items-start gap-2">
         <i data-lucide="alert-triangle" class="mt-0.5 h-4 w-4 shrink-0 text-amber-600"></i>
         <p class="text-xs leading-relaxed text-amber-800">${esc(e.disclaimer)}</p>
@@ -553,8 +616,8 @@ function taxesPage({ estimate, financials, user }) {
     ${P.card(P.cardHeader("Tax breakdown", "Estimated components for the fiscal year.") + `<div class="overflow-x-auto px-1 pb-3 pt-3"><table class="w-full"><thead><tr class="border-b border-gray-100 text-xs uppercase tracking-wide text-ink-faint"><th class="px-4 py-2 text-left">Component</th><th class="px-4 py-2 text-right">Rate</th><th class="px-4 py-2 text-right">Est. tax</th></tr></thead><tbody>${componentRows}</tbody></table></div>` + (sourceLinks ? `<div class="px-5 pb-4">${sourceLinks}</div>` : ""))}
 
     <section>
-      <h2 class="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-ink-faint"><i data-lucide="sparkles" class="h-4 w-4"></i>Tax efficiency & recommendations</h2>
-      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">${tips}</div>
+      ${recHeader}
+      ${tipsSection}
     </section>
 
     ${itemNotes ? P.card(P.cardHeader("How specific items are treated", "Different categories can carry different tax treatment.") + `<ul class="px-5 pb-5 pt-2">${itemNotes}</ul>`) : ""}
