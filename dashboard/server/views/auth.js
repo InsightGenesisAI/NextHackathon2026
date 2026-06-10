@@ -63,78 +63,104 @@ function loginPage({ error } = {}) {
 function signupPage({ error, values = {} } = {}) {
   const body = `<div class="rounded-2xl border border-gray-100 bg-white p-6 shadow-card">
     <h1 class="text-xl font-bold text-ink">Create your account</h1>
-    <p class="mt-1 text-sm text-ink-soft">Start protecting your business spend in minutes.</p>
+    <p class="mt-1 text-sm text-ink-soft">We'll look up your company to save you setup time.</p>
     ${error ? `<p class="mt-4 rounded-xl bg-rose-50 px-3.5 py-2.5 text-sm text-rose-700">${esc(error)}</p>` : ""}
     <form method="POST" action="/signup" class="mt-5 space-y-4">
       ${field("Your name", "name", "text", "Alex Rivera", values.name || "")}
       ${field("Company name", "company", "text", "Acme Co", values.company || "")}
+      ${field("Country", "country", "text", "United States", values.country || "")}
+      ${optionalField("Business address", "address", "text", "123 Main St, San Francisco, CA", values.address || "")}
       ${field("Email", "email", "email", "you@company.com", values.email || "")}
       ${field("Password", "password", "password", "At least 6 characters")}
-      <button type="submit" class="w-full rounded-xl bg-brand-500 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-brand-600">Create account</button>
+      <button type="submit" class="w-full rounded-xl bg-brand-500 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-brand-600">Create account & look up company</button>
     </form>
     <p class="mt-4 text-center text-sm text-ink-soft">Already have an account? <a href="/login" class="font-semibold text-brand-600 hover:text-brand-700">Sign in</a></p>
   </div>`;
   return authShell({ title: "Sign up — AgentCFO", body });
 }
 
-// Step 1: hardcoded base questions, grouped into sections.
-function onboardingBasePage({ user, sections, error }) {
-  function renderQuestion(q) {
-    const req = q.required ? "required" : "";
-    const reqMark = q.required ? ` <span class="text-rose-500">*</span>` : "";
-    const labelSpan = `<span class="text-sm font-medium text-ink">${esc(q.label)}${reqMark}</span>`;
-    if (q.type === "select") {
-      const opts = q.options.map((o) => `<option value="${esc(o)}">${esc(o)}</option>`).join("");
+// Make the address field optional on signup (not all businesses have one handy).
+function optionalField(label, name, type, placeholder = "", value = "") {
+  return `<label class="block">
+    <span class="text-sm font-medium text-ink">${esc(label)} <span class="text-ink-faint">(optional)</span></span>
+    <input name="${name}" type="${type}" placeholder="${esc(placeholder)}" value="${esc(value)}"
+      class="mt-1.5 w-full rounded-xl border border-gray-200 bg-canvas px-3.5 py-2.5 text-sm text-ink outline-none transition-colors placeholder:text-ink-faint focus:border-brand-300 focus:bg-white" />
+  </label>`;
+}
+
+// Loading interstitial while Exa + AI run (auto-submits to kick off lookup).
+function enrichLoadingPage({ user }) {
+  const body = `<div class="rounded-2xl border border-gray-100 bg-white p-8 text-center shadow-card">
+    <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-50 text-brand-600"><i data-lucide="search" class="h-6 w-6"></i></div>
+    <h1 class="mt-4 text-xl font-bold text-ink">Looking up ${esc(user.company || "your company")}…</h1>
+    <p class="mt-1 text-sm text-ink-soft">Searching the web and organizing what we find. This takes a few seconds.</p>
+    <div class="mt-5 flex justify-center"><span class="h-6 w-6 animate-spin rounded-full border-2 border-brand-200 border-t-brand-500"></span></div>
+    <form id="go" method="POST" action="/onboarding/enrich"></form>
+    <script>setTimeout(function(){document.getElementById('go').submit();}, 400);</script>
+    <noscript><div class="mt-4"><form method="POST" action="/onboarding/enrich"><button class="rounded-xl bg-brand-500 px-4 py-2.5 text-sm font-semibold text-white">Continue</button></form></div></noscript>
+  </div>`;
+  return authShell({ title: "Looking up your company — AgentCFO", body });
+}
+
+// Confirmation: show the AI-structured company profile, editable, with options
+// to confirm, correct fields, or reject ("not my company").
+function enrichConfirmPage({ user, criteria, profile, found, source, sources, confidence, error }) {
+  const fieldFor = (c) => {
+    const val = profile[c.id] || "";
+    if (c.type === "textarea") {
       return `<label class="block">
-        ${labelSpan}
-        <select name="${q.id}" ${req} class="mt-1.5 w-full rounded-xl border border-gray-200 bg-canvas px-3.5 py-2.5 text-sm text-ink outline-none focus:border-brand-300 focus:bg-white">
-          <option value="" ${q.required ? "disabled" : ""} selected>Choose one…</option>${opts}
-        </select>
-      </label>`;
-    }
-    if (q.type === "textarea") {
-      return `<label class="block">
-        ${labelSpan}
-        <textarea name="${q.id}" rows="2" ${req} placeholder="${esc(q.placeholder || "")}" class="mt-1.5 w-full resize-none rounded-xl border border-gray-200 bg-canvas px-3.5 py-2.5 text-sm text-ink outline-none placeholder:text-ink-faint focus:border-brand-300 focus:bg-white"></textarea>
+        <span class="text-sm font-medium text-ink">${esc(c.label)}</span>
+        <textarea name="${c.id}" rows="2" class="mt-1.5 w-full resize-none rounded-xl border border-gray-200 bg-canvas px-3.5 py-2.5 text-sm text-ink outline-none placeholder:text-ink-faint focus:border-brand-300 focus:bg-white">${esc(val)}</textarea>
       </label>`;
     }
     return `<label class="block">
-      ${labelSpan}
-      <input name="${q.id}" type="text" ${req} placeholder="${esc(q.placeholder || "")}" class="mt-1.5 w-full rounded-xl border border-gray-200 bg-canvas px-3.5 py-2.5 text-sm text-ink outline-none placeholder:text-ink-faint focus:border-brand-300 focus:bg-white" />
+      <span class="text-sm font-medium text-ink">${esc(c.label)}</span>
+      <input name="${c.id}" type="text" value="${esc(val)}" class="mt-1.5 w-full rounded-xl border border-gray-200 bg-canvas px-3.5 py-2.5 text-sm text-ink outline-none placeholder:text-ink-faint focus:border-brand-300 focus:bg-white" />
     </label>`;
-  }
+  };
 
-  const sectionBlocks = sections.map((s) => `<section class="rounded-2xl border border-gray-100 bg-white p-6 shadow-card">
-      <h2 class="text-base font-semibold text-ink">${esc(s.title)}</h2>
-      <p class="mt-0.5 text-sm text-ink-soft">${esc(s.description)}</p>
-      <div class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-        ${s.questions.map(renderQuestion).join("")}
-      </div>
-    </section>`).join("");
+  const sourceLinks = (sources || []).length
+    ? `<div class="mt-3 text-xs text-ink-faint"><span class="font-semibold">Sources:</span> ${sources.map((s) => `<a href="${esc(s.url)}" target="_blank" rel="noreferrer" class="underline hover:text-ink-soft">${esc(s.title || s.url)}</a>`).join(" · ")}</div>`
+    : "";
+
+  const banner = found
+    ? `<div class="rounded-xl bg-brand-50 px-4 py-3 text-sm text-brand-800"><span class="font-semibold">We found a match.</span> Confidence ${Math.round((confidence || 0) * 100)}%. Please review and fix anything that's off.</div>`
+    : `<div class="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-800"><span class="font-semibold">We couldn't confidently identify your company.</span> Fill in what you can below, or skip ahead to the questions.</div>`;
+
+  const badge = source === "exa+ai"
+    ? `<span class="inline-flex items-center gap-1 rounded-full bg-brand-50 px-2 py-0.5 text-xs font-semibold text-brand-700"><i data-lucide="sparkles" class="h-3 w-3"></i>Found via Exa + AI</span>`
+    : source === "ai"
+    ? `<span class="inline-flex items-center gap-1 rounded-full bg-brand-50 px-2 py-0.5 text-xs font-semibold text-brand-700"><i data-lucide="sparkles" class="h-3 w-3"></i>AI-structured</span>`
+    : `<span class="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-semibold text-ink-soft">Manual entry</span>`;
 
   const body = `<div class="space-y-4">
     <div class="rounded-2xl border border-gray-100 bg-white p-6 shadow-card">
-      <div class="mb-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-brand-600"><span class="h-2 w-2 rounded-full bg-brand-500"></span>Step 1 of 2 · About your business</div>
-      <h1 class="text-xl font-bold text-ink">Tell us about ${esc(user.company || "your company")}</h1>
-      <p class="mt-1 text-sm text-ink-soft">The more you share, the more accurate AgentCFO gets. Fields marked <span class="text-rose-500">*</span> are required — the rest are optional but helpful.</p>
+      <div class="mb-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-brand-600"><span class="h-2 w-2 rounded-full bg-brand-500"></span>Step 1 of 2 · Confirm your company</div>
+      <div class="flex items-center justify-between gap-2"><h1 class="text-xl font-bold text-ink">Is this ${esc(user.company || "your company")}?</h1>${badge}</div>
+      <p class="mt-1 text-sm text-ink-soft">Here's what we found. Correct anything that's wrong — your edits are what we'll save.</p>
+      <div class="mt-4">${banner}</div>
+      ${sourceLinks}
       ${error ? `<p class="mt-4 rounded-xl bg-rose-50 px-3.5 py-2.5 text-sm text-rose-700">${esc(error)}</p>` : ""}
     </div>
-    <form method="POST" action="/onboarding/basics" class="space-y-4">
-      ${sectionBlocks}
-      <div class="flex justify-end">
-        <button type="submit" class="rounded-xl bg-brand-500 px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-brand-600">Continue to tailored questions</button>
+    <form method="POST" action="/onboarding/confirm" class="space-y-4">
+      <section class="rounded-2xl border border-gray-100 bg-white p-6 shadow-card">
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">${criteria.map(fieldFor).join("")}</div>
+      </section>
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <button type="submit" name="reject" value="1" class="rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-semibold text-ink-soft transition-colors hover:bg-gray-50">This isn't my company — start fresh</button>
+        <button type="submit" name="confirm" value="1" class="rounded-xl bg-brand-500 px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-brand-600">Looks right — continue</button>
       </div>
     </form>
   </div>`;
-  return authShell({ title: "Set up — AgentCFO", body, wide: true });
+  return authShell({ title: "Confirm company — AgentCFO", body, wide: true });
 }
 
-// Step 2: AI-generated follow-up questions.
-function onboardingAiPage({ user, questions, source }) {
+// Step 2: AI-generated context questions (driven by hardcoded criteria).
+function contextQuestionsPage({ user, questions, source }) {
   const fields = questions.map((q, i) => `<label class="block">
     <span class="text-sm font-medium text-ink">${esc(q)}</span>
-    <textarea name="ai_${i}" rows="2" placeholder="Your answer…" class="mt-1.5 w-full resize-none rounded-xl border border-gray-200 bg-canvas px-3.5 py-2.5 text-sm text-ink outline-none placeholder:text-ink-faint focus:border-brand-300 focus:bg-white"></textarea>
-    <input type="hidden" name="ai_q_${i}" value="${esc(q)}" />
+    <textarea name="ctx_${i}" rows="2" placeholder="Your answer…" class="mt-1.5 w-full resize-none rounded-xl border border-gray-200 bg-canvas px-3.5 py-2.5 text-sm text-ink outline-none placeholder:text-ink-faint focus:border-brand-300 focus:bg-white"></textarea>
+    <input type="hidden" name="ctx_q_${i}" value="${esc(q)}" />
   </label>`).join("");
 
   const badge = source === "ai"
@@ -142,13 +168,11 @@ function onboardingAiPage({ user, questions, source }) {
     : `<span class="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-semibold text-ink-soft">Tailored questions</span>`;
 
   const body = `<div class="rounded-2xl border border-gray-100 bg-white p-6 shadow-card">
-    <div class="mb-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-brand-600"><span class="h-2 w-2 rounded-full bg-brand-500"></span>Step 2 of 2 · A little deeper</div>
-    <div class="flex items-center justify-between gap-2">
-      <h1 class="text-xl font-bold text-ink">A few tailored questions</h1>${badge}
-    </div>
-    <p class="mt-1 text-sm text-ink-soft">Based on your answers, these help AgentCFO understand ${esc(user.company || "your business")} better. Optional, but they improve accuracy.</p>
-    <form method="POST" action="/onboarding/ai" class="mt-5 space-y-4">
-      <input type="hidden" name="ai_count" value="${questions.length}" />
+    <div class="mb-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-brand-600"><span class="h-2 w-2 rounded-full bg-brand-500"></span>Step 2 of 2 · A little more context</div>
+    <div class="flex items-center justify-between gap-2"><h1 class="text-xl font-bold text-ink">A few questions about how you spend</h1>${badge}</div>
+    <p class="mt-1 text-sm text-ink-soft">These help AgentCFO judge purchases for ${esc(user.company || "your business")}. Optional, but they improve accuracy.</p>
+    <form method="POST" action="/onboarding/context" class="mt-5 space-y-4">
+      <input type="hidden" name="ctx_count" value="${questions.length}" />
       ${fields}
       <div class="flex gap-3">
         <button type="submit" name="finish" value="1" class="flex-1 rounded-xl bg-brand-500 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-brand-600">Finish setup</button>
@@ -159,4 +183,11 @@ function onboardingAiPage({ user, questions, source }) {
   return authShell({ title: "Set up — AgentCFO", body, wide: true });
 }
 
-module.exports = { loginPage, signupPage, onboardingBasePage, onboardingAiPage };
+// Step 1: hardcoded base questions, grouped into sections.
+module.exports = {
+  loginPage,
+  signupPage,
+  enrichLoadingPage,
+  enrichConfirmPage,
+  contextQuestionsPage,
+};

@@ -25,7 +25,7 @@ function verifyPassword(password, stored) {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
-function createUser({ name, email, company, password }) {
+function createUser({ name, email, company, country, address, password }) {
   const key = String(email || "").trim().toLowerCase();
   if (!key) throw new Error("Email is required");
   if (!password || password.length < 6) throw new Error("Password must be at least 6 characters");
@@ -35,10 +35,13 @@ function createUser({ name, email, company, password }) {
     name: (name || "").trim() || key.split("@")[0],
     email: key,
     company: (company || "").trim(),
+    country: (country || "").trim(),
+    address: (address || "").trim(),
     passwordHash: hashPassword(password),
     createdAt: new Date().toISOString(),
     profileComplete: false,
-    profile: null, // { basics: {...}, aiAnswers: [...] }
+    companyProfile: null, // structured company data (from Exa+AI or manual)
+    profile: null,        // { contextAnswers: [...] }
   };
   users.set(key, user);
   return user;
@@ -61,23 +64,32 @@ function saveProfile(email, profile) {
   if (!user) return null;
   user.profile = profile;
   user.profileComplete = true;
-  if (profile && profile.basics && profile.basics.company && !user.company) {
-    user.company = profile.basics.company;
+  return user;
+}
+
+// Save the structured company profile (the criteria schema). Used by both
+// onboarding and Settings edits.
+function saveCompanyProfile(email, companyProfile) {
+  const user = getUser(email);
+  if (!user) return null;
+  user.companyProfile = companyProfile;
+  if (companyProfile && companyProfile.legalName && !user.company) {
+    user.company = companyProfile.legalName;
   }
   return user;
 }
 
-// Stash step-1 answers + generated AI questions between onboarding steps.
-function setPendingOnboarding(email, { basics, aiQuestions, aiSource }) {
+// Stash enrichment result + generated questions between onboarding steps.
+function setPendingEnrichment(email, pending) {
   const user = getUser(email);
   if (!user) return null;
-  user.pending = { basics, aiQuestions, aiSource };
+  user.pendingEnrichment = pending;
   return user;
 }
 
-function getPendingOnboarding(email) {
+function getPendingEnrichment(email) {
   const user = getUser(email);
-  return user ? user.pending || null : null;
+  return user ? user.pendingEnrichment || null : null;
 }
 
 // ── Sessions ──
@@ -136,8 +148,9 @@ module.exports = {
   authenticate,
   getUser,
   saveProfile,
-  setPendingOnboarding,
-  getPendingOnboarding,
+  saveCompanyProfile,
+  setPendingEnrichment,
+  getPendingEnrichment,
   createSession,
   destroySession,
   parseCookies,

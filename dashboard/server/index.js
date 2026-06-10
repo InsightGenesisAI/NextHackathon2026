@@ -17,7 +17,7 @@ const pages = require("./views/pages");
 const { CLIENT_JS } = require("./clientScript");
 const auth = require("./auth");
 const authViews = require("./views/auth");
-const onboarding = require("./onboarding");
+const enrichment = require("./enrichment");
 
 const PORT = process.env.PORT || 3000;
 
@@ -226,39 +226,87 @@ async function handleAuth(req, res, pathname) {
     return true;
   }
 
+  // Save company-profile edits from Settings (requires a session).
+  if (req.method === "POST" && pathname === "/settings/company") {
+    const user = auth.userFromRequest(req);
+    if (!user) { redirect(res, "/login"); return true; }
+    const form = await readForm(req);
+    const companyProfile = {};
+    for (const c of enrichment.getCompanyCriteria()) companyProfile[c.id] = (form[c.id] || "").trim();
+    auth.saveCompanyProfile(user.email, companyProfile);
+    redirect(res, "/settings");
+    return true;
+  }
+
   // Onboarding (requires a session)
   if (pathname === "/onboarding" || pathname.startsWith("/onboarding/")) {
     const user = auth.userFromRequest(req);
     if (!user) { redirect(res, "/login"); return true; }
 
-    // Step 1 form
+    // Entry: show the loading interstitial that kicks off enrichment.
     if (req.method === "GET" && pathname === "/onboarding") {
-      sendHtml(res, 200, authViews.onboardingBasePage({ user, sections: onboarding.getBaseSections() }));
+      sendHtml(res, 200, authViews.enrichLoadingPage({ user }));
       return true;
     }
 
-    // Step 1 submit → generate AI follow-ups → step 2
-    if (req.method === "POST" && pathname === "/onboarding/basics") {
-      const form = await readForm(req);
-      const basics = { company: user.company, ...form };
-      const { questions, source } = await onboarding.generateFollowupQuestions(basics);
-      auth.setPendingOnboarding(user.email, { basics, aiQuestions: questions, aiSource: source });
-      sendHtml(res, 200, authViews.onboardingAiPage({ user, questions, source }));
+    // Run Exa + AI enrichment, then show the editable confirmation form.
+    if (req.method === "POST" && pathname === "/onboarding/enrich") {
+      const result = await enrichment.enrichCompany({ company: user.company, country: user.country, address: user.address });
+      auth.setPendingEnrichment(user.email, result);
+      sendHtml(res, 200, authViews.enrichConfirmPage({
+        user,
+        criteria: enrichment.getCompanyCriteria(),
+        profile: result.profile,
+        found: result.found,
+        source: result.source,
+        sources: result.sources,
+        confidence: result.confidence,
+      }));
       return true;
     }
 
-    // Step 2 submit → save profile → dashboard
-    if (req.method === "POST" && pathname === "/onboarding/ai") {
+    // Confirm/correct company → save profile → generate context questions.
+    // "reject" wipes the AI guess and shows a blank form to fill manually.
+    if (req.method === "POST" && pathname === "/onboarding/confirm") {
       const form = await readForm(req);
-      const pending = auth.getPendingOnboarding(user.email) || { basics: {}, aiQuestions: [] };
-      const aiAnswers = [];
-      const count = parseInt(form.ai_count || "0", 10);
-      for (let i = 0; i < count; i++) {
-        const q = form[`ai_q_${i}`];
-        const a = form[`ai_${i}`];
-        if (q) aiAnswers.push({ question: q, answer: (a || "").trim() });
+      const criteria = enrichment.getCompanyCriteria();
+
+      if (form.reject) {
+        const blank = enrichment.emptyProfile();
+        blank.legalName = user.company || "";
+        blank.headquarters = user.country || "";
+        sendHtml(res, 200, authViews.enrichConfirmPage({
+          user, criteria, profile: blank, found: false, source: "manual", sources: [], confidence: 0,
+        }));
+        return true;
       }
-      auth.saveProfile(user.email, { basics: pending.basics, aiQuestions: pending.aiQuestions, aiAnswers, completedAt: new Date().toISOString() });
+
+      const companyProfile = {};
+      for (const c of criteria) companyProfile[c.id] = (form[c.id] || "").trim();
+      auth.saveCompanyProfile(user.email, companyProfile);
+
+      const { questions, source } = await enrichment.generateContextQuestions(companyProfile);
+      auth.setPendingEnrichment(user.email, { ...(auth.getPendingEnrichment(user.email) || {}), companyProfile, contextQuestions: questions, contextSource: source });
+      sendHtml(res, 200, authViews.contextQuestionsPage({ user, questions, source }));
+      return true;
+    }
+
+    // Context answers → finish → dashboard.
+    if (req.method === "POST" && pathname === "/onboarding/context") {
+      const form = await readForm(req);
+      const pending = auth.getPendingEnrichment(user.email) || {};
+      const contextAnswers = [];
+      const count = parseInt(form.ctx_count || "0", 10);
+      for (let i = 0; i < count; i++) {
+        const q = form[`ctx_q_${i}`];
+        const a = form[`ctx_${i}`];
+        if (q) contextAnswers.push({ question: q, answer: (a || "").trim() });
+      }
+      auth.saveProfile(user.email, {
+        contextQuestions: pending.contextQuestions || [],
+        contextAnswers,
+        completedAt: new Date().toISOString(),
+      });
       redirect(res, "/");
       return true;
     }

@@ -308,39 +308,52 @@ function settingsPage({ user } = {}) {
     <div><p class="text-sm font-semibold text-ink">${esc(label)}</p><p class="text-xs text-ink-soft">${esc(desc)}</p></div>
   </button>`;
 
-  // Build a company-profile summary from onboarding answers, if present.
+  // Editable company profile (the criteria schema) + saved context answers.
   let profileCard = "";
-  const profile = user && user.profile;
-  if (profile) {
-    const b = profile.basics || {};
-    const basicRows = [
-      ["briefcase", "Industry", b.industry],
-      ["tag", "Niche / specialty", b.subIndustry],
-      ["users", "Team size", b.size],
-      ["trending-up", "Stage", b.stage],
-      ["calendar", "Years operating", b.yearsOperating],
-      ["bar-chart-3", "Monthly revenue", b.monthlyRevenue],
-      ["wallet", "Monthly spend", b.monthlySpend],
-      ["credit-card", "Software spend", b.softwareSpend],
-      ["landmark", "Funding", b.fundingStage],
-      ["gauge", "Cash sensitivity", b.cashSensitivity],
-      ["package", "Top categories", b.topCategories],
-      ["layers", "Existing tools", b.existingTools],
-      ["repeat", "Purchase frequency", b.purchaseFrequency],
-      ["copy", "Duplicate concern", b.duplicateConcern],
-      ["target", "Top priority", b.priority],
-      ["shield-check", "Review threshold", b.approvalThreshold],
-      ["user-check", "Approvers", b.approvers],
-      ["clock", "Slow-review preference", b.riskTolerance],
-    ].filter(([, , v]) => v).map(([icon, label, v]) => row(icon, label, v)).join("");
+  const cp = user && user.companyProfile;
+  const companyFields = [
+    ["legalName", "Legal / full company name", "text"],
+    ["industry", "Industry", "text"],
+    ["specialty", "Niche / specialty", "text"],
+    ["description", "What the company does", "textarea"],
+    ["foundedYear", "Year founded", "text"],
+    ["employeeCount", "Approx. number of employees", "text"],
+    ["headquarters", "Headquarters (city, country)", "text"],
+    ["website", "Website", "text"],
+    ["businessModel", "Business model", "text"],
+    ["keyProducts", "Key products or services", "textarea"],
+  ];
+  if (cp) {
+    const inputFor = ([id, label, type]) => {
+      const v = cp[id] || "";
+      if (type === "textarea") {
+        return `<label class="block"><span class="text-sm font-medium text-ink">${esc(label)}</span>
+          <textarea name="${id}" rows="2" class="mt-1.5 w-full resize-none rounded-xl border border-gray-200 bg-canvas px-3.5 py-2.5 text-sm text-ink outline-none focus:border-brand-300 focus:bg-white">${esc(v)}</textarea></label>`;
+      }
+      return `<label class="block"><span class="text-sm font-medium text-ink">${esc(label)}</span>
+        <input name="${id}" type="text" value="${esc(v)}" class="mt-1.5 w-full rounded-xl border border-gray-200 bg-canvas px-3.5 py-2.5 text-sm text-ink outline-none focus:border-brand-300 focus:bg-white" /></label>`;
+    };
+    const saved = user && user.__companySaved ? `<span class="text-xs font-semibold text-brand-600">Saved ✓</span>` : "";
+    profileCard = P.card(P.cardHeader("Company profile", "From your setup — edit anytime if something changed.", saved) +
+      `<form method="POST" action="/settings/company" class="px-5 pb-5 pt-3">
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">${companyFields.map(inputFor).join("")}</div>
+        <div class="mt-4 flex items-center gap-3">
+          <button type="submit" class="rounded-xl bg-brand-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-600">Save changes</button>
+          <a href="/onboarding" class="rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-semibold text-ink-soft hover:bg-gray-50">Re-run company lookup</a>
+        </div>
+      </form>`);
+  }
 
-    const aiRows = (profile.aiAnswers || []).filter((a) => a.answer).map((a) =>
+  // Saved context answers (from the AI questions step).
+  let contextCard = "";
+  const profile = user && user.profile;
+  const ctxAnswers = profile && profile.contextAnswers ? profile.contextAnswers.filter((a) => a.answer) : [];
+  if (ctxAnswers.length) {
+    const rows = ctxAnswers.map((a) =>
       `<div class="rounded-xl bg-canvas px-3.5 py-3"><p class="text-xs font-semibold text-ink-soft">${esc(a.question)}</p><p class="mt-1 text-sm text-ink">${esc(a.answer)}</p></div>`
     ).join("");
-
-    profileCard = P.card(P.cardHeader("Company profile", "What you told AgentCFO during setup.", `<a href="/onboarding" class="rounded-xl border border-gray-200 px-3 py-1.5 text-xs font-semibold text-ink-soft hover:bg-gray-50">Update</a>`) +
-      `<div class="grid grid-cols-1 gap-x-6 px-5 pb-3 pt-3 sm:grid-cols-2">${basicRows || `<p class="py-2 text-sm text-ink-faint">No business details yet.</p>`}</div>` +
-      (aiRows ? `<div class="space-y-2 border-t border-gray-50 px-5 pb-5 pt-4"><p class="mb-1 text-xs font-semibold uppercase tracking-wide text-ink-faint">Tailored follow-ups</p>${aiRows}</div>` : ""));
+    contextCard = P.card(P.cardHeader("Spending context", "Answers AgentCFO uses to tailor purchase reviews.", `<a href="/onboarding" class="rounded-xl border border-gray-200 px-3 py-1.5 text-xs font-semibold text-ink-soft hover:bg-gray-50">Update</a>`) +
+      `<div class="space-y-2 px-5 pb-5 pt-3">${rows}</div>`);
   }
 
   const companyDesc = user ? `${user.company || "Your company"} · ${user.email}` : "Acme Co · Small business plan";
@@ -348,6 +361,7 @@ function settingsPage({ user } = {}) {
   const body = `<div class="space-y-4">
     ${P.card(P.cardHeader("Account", "Your sign-in details.") + `<div class="space-y-1 px-5 pb-5 pt-3">${row("user", user ? user.name : "Account", user ? user.email : "—")}${row("building-2", "Company", companyDesc)}<div class="px-1 pt-2"><a href="/logout" class="inline-flex items-center gap-1.5 rounded-xl border border-gray-200 px-3.5 py-2 text-sm font-semibold text-ink-soft hover:bg-gray-50"><i data-lucide="log-out" class="h-4 w-4"></i>Sign out</a></div></div>`)}
     ${profileCard}
+    ${contextCard}
     ${P.card(P.cardHeader("Protection", "Let AgentCFO review purchases as they happen.") + `<div class="space-y-1 px-5 pb-5 pt-3">${row("shield-check", "Purchase protection", "Review checkouts before you buy.", toggle("protection", true))}${row("bell", "Email alerts", "Get notified when something needs a look.", toggle("alerts", true))}</div>`)}
     ${P.card(P.cardHeader("If the review is slow", "What should happen if AgentCFO can't finish in time.") + `<div class="space-y-2 px-5 pb-5 pt-3">${radio("Pause and let me decide", "Hold the checkout until the review finishes or I choose to continue.", true, "risk")}${radio("Let it through, log for follow-up", "Continue checkout and flag the purchase for later review.", false, "risk")}</div>`)}
   </div>`;
