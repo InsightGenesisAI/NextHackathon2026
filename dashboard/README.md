@@ -33,8 +33,11 @@ PORT=8080 npm start
   hashed with Node's built-in `crypto` (scrypt). Sessions are cookie-based.
 - `/login`, `/logout` — sign in / out.
 - After signup, users go through a 2-step onboarding wizard:
-  1. **Hardcoded questions** about the business (industry, size, spend, priority).
-  2. **AI follow-up questions** tailored to those answers, for deeper context.
+  1. **Detailed hardcoded questions** grouped into four sections — Business
+     basics, Money & budgets, Tools & spending, and Approvals & priorities
+     (18 questions; a few required, the rest optional).
+  2. **AI follow-up questions** (about 5) tailored to those answers, to capture
+     context the hardcoded questions didn't cover.
 
 The dashboard pages are gated: signed-out users are sent to `/login`, and
 signed-in users who haven't finished onboarding are sent to `/onboarding`. The

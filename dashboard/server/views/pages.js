@@ -315,10 +315,23 @@ function settingsPage({ user } = {}) {
     const b = profile.basics || {};
     const basicRows = [
       ["briefcase", "Industry", b.industry],
+      ["tag", "Niche / specialty", b.subIndustry],
       ["users", "Team size", b.size],
-      ["wallet", "Monthly tool spend", b.monthlySpend],
+      ["trending-up", "Stage", b.stage],
+      ["calendar", "Years operating", b.yearsOperating],
+      ["bar-chart-3", "Monthly revenue", b.monthlyRevenue],
+      ["wallet", "Monthly spend", b.monthlySpend],
+      ["credit-card", "Software spend", b.softwareSpend],
+      ["landmark", "Funding", b.fundingStage],
+      ["gauge", "Cash sensitivity", b.cashSensitivity],
+      ["package", "Top categories", b.topCategories],
+      ["layers", "Existing tools", b.existingTools],
+      ["repeat", "Purchase frequency", b.purchaseFrequency],
+      ["copy", "Duplicate concern", b.duplicateConcern],
       ["target", "Top priority", b.priority],
-      ["package", "Biggest categories", b.tools],
+      ["shield-check", "Review threshold", b.approvalThreshold],
+      ["user-check", "Approvers", b.approvers],
+      ["clock", "Slow-review preference", b.riskTolerance],
     ].filter(([, , v]) => v).map(([icon, label, v]) => row(icon, label, v)).join("");
 
     const aiRows = (profile.aiAnswers || []).filter((a) => a.answer).map((a) =>
@@ -326,8 +339,8 @@ function settingsPage({ user } = {}) {
     ).join("");
 
     profileCard = P.card(P.cardHeader("Company profile", "What you told AgentCFO during setup.", `<a href="/onboarding" class="rounded-xl border border-gray-200 px-3 py-1.5 text-xs font-semibold text-ink-soft hover:bg-gray-50">Update</a>`) +
-      `<div class="space-y-1 px-5 pb-3 pt-3">${basicRows || `<p class="py-2 text-sm text-ink-faint">No business details yet.</p>`}</div>` +
-      (aiRows ? `<div class="space-y-2 px-5 pb-5">${aiRows}</div>` : ""));
+      `<div class="grid grid-cols-1 gap-x-6 px-5 pb-3 pt-3 sm:grid-cols-2">${basicRows || `<p class="py-2 text-sm text-ink-faint">No business details yet.</p>`}</div>` +
+      (aiRows ? `<div class="space-y-2 border-t border-gray-50 px-5 pb-5 pt-4"><p class="mb-1 text-xs font-semibold uppercase tracking-wide text-ink-faint">Tailored follow-ups</p>${aiRows}</div>` : ""));
   }
 
   const companyDesc = user ? `${user.company || "Your company"} · ${user.email}` : "Acme Co · Small business plan";

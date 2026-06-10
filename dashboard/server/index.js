@@ -233,7 +233,7 @@ async function handleAuth(req, res, pathname) {
 
     // Step 1 form
     if (req.method === "GET" && pathname === "/onboarding") {
-      sendHtml(res, 200, authViews.onboardingBasePage({ user, questions: onboarding.getBaseQuestions() }));
+      sendHtml(res, 200, authViews.onboardingBasePage({ user, sections: onboarding.getBaseSections() }));
       return true;
     }
 

@@ -1,7 +1,9 @@
 const { esc } = require("../format");
 
 // Minimal auth shell — centered card, brand styling, Tailwind via CDN.
-function authShell({ title, body }) {
+// `wide` widens the container for the multi-section onboarding form.
+function authShell({ title, body, wide = false }) {
+  const widthCls = wide ? "max-w-3xl" : "max-w-md";
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -22,7 +24,7 @@ function authShell({ title, body }) {
 </head>
 <body class="font-sans">
   <div class="flex min-h-screen items-center justify-center px-4 py-10">
-    <div class="w-full max-w-md">
+    <div class="w-full ${widthCls}">
       <div class="mb-6 flex items-center justify-center gap-2">
         <span class="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-500 text-white"><i data-lucide="leaf" class="h-5 w-5"></i></span>
         <span class="text-xl font-bold tracking-tight text-ink">AgentCFO</span>
@@ -75,35 +77,56 @@ function signupPage({ error, values = {} } = {}) {
   return authShell({ title: "Sign up — AgentCFO", body });
 }
 
-// Step 1: hardcoded base questions.
-function onboardingBasePage({ user, questions, error }) {
-  const fields = questions.map((q) => {
+// Step 1: hardcoded base questions, grouped into sections.
+function onboardingBasePage({ user, sections, error }) {
+  function renderQuestion(q) {
+    const req = q.required ? "required" : "";
+    const reqMark = q.required ? ` <span class="text-rose-500">*</span>` : "";
+    const labelSpan = `<span class="text-sm font-medium text-ink">${esc(q.label)}${reqMark}</span>`;
     if (q.type === "select") {
       const opts = q.options.map((o) => `<option value="${esc(o)}">${esc(o)}</option>`).join("");
       return `<label class="block">
-        <span class="text-sm font-medium text-ink">${esc(q.label)}</span>
-        <select name="${q.id}" required class="mt-1.5 w-full rounded-xl border border-gray-200 bg-canvas px-3.5 py-2.5 text-sm text-ink outline-none focus:border-brand-300 focus:bg-white">
-          <option value="" disabled selected>Choose one…</option>${opts}
+        ${labelSpan}
+        <select name="${q.id}" ${req} class="mt-1.5 w-full rounded-xl border border-gray-200 bg-canvas px-3.5 py-2.5 text-sm text-ink outline-none focus:border-brand-300 focus:bg-white">
+          <option value="" ${q.required ? "disabled" : ""} selected>Choose one…</option>${opts}
         </select>
       </label>`;
     }
+    if (q.type === "textarea") {
+      return `<label class="block">
+        ${labelSpan}
+        <textarea name="${q.id}" rows="2" ${req} placeholder="${esc(q.placeholder || "")}" class="mt-1.5 w-full resize-none rounded-xl border border-gray-200 bg-canvas px-3.5 py-2.5 text-sm text-ink outline-none placeholder:text-ink-faint focus:border-brand-300 focus:bg-white"></textarea>
+      </label>`;
+    }
     return `<label class="block">
-      <span class="text-sm font-medium text-ink">${esc(q.label)}</span>
-      <input name="${q.id}" type="text" placeholder="${esc(q.placeholder || "")}" class="mt-1.5 w-full rounded-xl border border-gray-200 bg-canvas px-3.5 py-2.5 text-sm text-ink outline-none placeholder:text-ink-faint focus:border-brand-300 focus:bg-white" />
+      ${labelSpan}
+      <input name="${q.id}" type="text" ${req} placeholder="${esc(q.placeholder || "")}" class="mt-1.5 w-full rounded-xl border border-gray-200 bg-canvas px-3.5 py-2.5 text-sm text-ink outline-none placeholder:text-ink-faint focus:border-brand-300 focus:bg-white" />
     </label>`;
-  }).join("");
+  }
 
-  const body = `<div class="rounded-2xl border border-gray-100 bg-white p-6 shadow-card">
-    <div class="mb-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-brand-600"><span class="h-2 w-2 rounded-full bg-brand-500"></span>Step 1 of 2 · About your business</div>
-    <h1 class="text-xl font-bold text-ink">Tell us about ${esc(user.company || "your company")}</h1>
-    <p class="mt-1 text-sm text-ink-soft">A few quick questions so AgentCFO can tailor its advice.</p>
-    ${error ? `<p class="mt-4 rounded-xl bg-rose-50 px-3.5 py-2.5 text-sm text-rose-700">${esc(error)}</p>` : ""}
-    <form method="POST" action="/onboarding/basics" class="mt-5 space-y-4">
-      ${fields}
-      <button type="submit" class="w-full rounded-xl bg-brand-500 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-brand-600">Continue</button>
+  const sectionBlocks = sections.map((s) => `<section class="rounded-2xl border border-gray-100 bg-white p-6 shadow-card">
+      <h2 class="text-base font-semibold text-ink">${esc(s.title)}</h2>
+      <p class="mt-0.5 text-sm text-ink-soft">${esc(s.description)}</p>
+      <div class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+        ${s.questions.map(renderQuestion).join("")}
+      </div>
+    </section>`).join("");
+
+  const body = `<div class="space-y-4">
+    <div class="rounded-2xl border border-gray-100 bg-white p-6 shadow-card">
+      <div class="mb-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-brand-600"><span class="h-2 w-2 rounded-full bg-brand-500"></span>Step 1 of 2 · About your business</div>
+      <h1 class="text-xl font-bold text-ink">Tell us about ${esc(user.company || "your company")}</h1>
+      <p class="mt-1 text-sm text-ink-soft">The more you share, the more accurate AgentCFO gets. Fields marked <span class="text-rose-500">*</span> are required — the rest are optional but helpful.</p>
+      ${error ? `<p class="mt-4 rounded-xl bg-rose-50 px-3.5 py-2.5 text-sm text-rose-700">${esc(error)}</p>` : ""}
+    </div>
+    <form method="POST" action="/onboarding/basics" class="space-y-4">
+      ${sectionBlocks}
+      <div class="flex justify-end">
+        <button type="submit" class="rounded-xl bg-brand-500 px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-brand-600">Continue to tailored questions</button>
+      </div>
     </form>
   </div>`;
-  return authShell({ title: "Set up — AgentCFO", body });
+  return authShell({ title: "Set up — AgentCFO", body, wide: true });
 }
 
 // Step 2: AI-generated follow-up questions.
@@ -133,7 +156,7 @@ function onboardingAiPage({ user, questions, source }) {
       </div>
     </form>
   </div>`;
-  return authShell({ title: "Set up — AgentCFO", body });
+  return authShell({ title: "Set up — AgentCFO", body, wide: true });
 }
 
 module.exports = { loginPage, signupPage, onboardingBasePage, onboardingAiPage };
