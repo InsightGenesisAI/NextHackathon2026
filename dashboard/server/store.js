@@ -31,6 +31,14 @@ function getActionsForUser(user) {
   return stripe.getActions(user);
 }
 
+function getFinancialsForUser(user) {
+  return stripe.getFinancials(user);
+}
+
+function getTaxProfileForUser(user) {
+  return stripe.getTaxProfile(user);
+}
+
 function getDashboardSummaryForUser(user) {
   const base = stripe.getSummaryBase(user);
   const connected = stripe.isConnected(user);
@@ -108,6 +116,8 @@ module.exports = {
   getRecentPurchasesForUser,
   getFinancialHealthForUser,
   getActionsForUser,
+  getFinancialsForUser,
+  getTaxProfileForUser,
   getDashboardSummaryForUser,
   // public hub (extension backend)
   hubPurchases,

@@ -420,7 +420,150 @@ function settingsPage({ user } = {}) {
   return `<div class="max-w-2xl">${P.pageHeader("Settings", "Tune how AgentCFO works for your business.")}${body}</div>`;
 }
 
+// ── Financials ──
+function financialsPage({ financials, user }) {
+  const connected = user && user.stripeConnected;
+  if (!connected) {
+    return P.pageHeader("Financials", "Revenue, expenses, and profitability.") +
+      P.connectStripeBanner("/financials");
+  }
+  const f = financials;
+  const pct = (n) => `${n > 0 ? "+" : ""}${n}%`;
+
+  const topMetrics = [
+    P.metricCard({ label: "Annual Revenue", value: money(f.revenue.totalCents), sub: `${pct(f.revenue.growthYoYPct)} YoY`, icon: "trending-up", tone: "good" }),
+    P.metricCard({ label: "Gross Profit", value: money(f.grossProfitCents), sub: `${f.grossMarginPct}% margin`, icon: "wallet", tone: "good" }),
+    P.metricCard({ label: "Operating Profit", value: money(f.operatingProfitCents), sub: `${f.operatingMarginPct}% margin`, icon: "bar-chart-3", tone: "good" }),
+    P.metricCard({ label: "Net (pre-tax)", value: money(f.netProfitBeforeTaxCents), sub: `${f.netMarginPct}% margin`, icon: "piggy-bank", tone: "good" }),
+  ].join("");
+
+  const recurring = [
+    P.metricCard({ label: "MRR", value: money(f.mrrCents), sub: "Monthly recurring revenue", icon: "repeat", tone: "neutral" }),
+    P.metricCard({ label: "ARR", value: money(f.arrCents), sub: "Annual recurring revenue", icon: "calendar", tone: "neutral" }),
+    P.metricCard({ label: "EBITDA", value: money(f.ebitdaCents), sub: "Earnings before ITDA", icon: "activity", tone: "neutral" }),
+    P.metricCard({ label: "COGS", value: money(f.cogsCents), sub: "Cost of goods sold", icon: "package", tone: "neutral" }),
+  ].join("");
+
+  // Revenue streams as proportion bars
+  const revMax = Math.max(...f.revenue.streams.map((s) => s.amountCents), 1);
+  const revRows = f.revenue.streams.map((s) => `<div class="py-2">
+    <div class="flex items-center justify-between text-sm"><span class="font-medium text-ink">${esc(s.name)}</span><span class="text-ink-soft">${money(s.amountCents)}</span></div>
+    <div class="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-gray-100"><div class="progress-fill h-full rounded-full bg-brand-500" style="width:${Math.round((s.amountCents / revMax) * 100)}%"></div></div>
+  </div>`).join("");
+
+  // Expense categories
+  const expMax = Math.max(...f.expenses.categories.map((c) => c.amountCents), 1);
+  const expRows = f.expenses.categories.map((c) => `<div class="py-2">
+    <div class="flex items-center justify-between text-sm"><span class="font-medium text-ink">${esc(c.name)}</span><span class="text-ink-soft">${money(c.amountCents)}</span></div>
+    <div class="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-gray-100"><div class="progress-fill h-full rounded-full bg-amber-500" style="width:${Math.round((c.amountCents / expMax) * 100)}%"></div></div>
+  </div>`).join("");
+
+  // Monthly P&L mini-table
+  const monthsRows = f.monthly.map((m) => {
+    const profit = m.revenueCents - m.expensesCents;
+    return `<tr class="border-b border-gray-50 last:border-0">
+      <td class="px-4 py-2 text-sm font-medium text-ink">${esc(m.month)}</td>
+      <td class="px-4 py-2 text-right text-sm text-ink-soft">${money(m.revenueCents)}</td>
+      <td class="px-4 py-2 text-right text-sm text-ink-soft">${money(m.expensesCents)}</td>
+      <td class="px-4 py-2 text-right text-sm font-semibold ${profit >= 0 ? "text-brand-600" : "text-rose-600"}">${money(profit)}</td>
+    </tr>`;
+  }).join("");
+
+  const revTrend = f.monthly.map((m) => Math.round(m.revenueCents / 1000));
+
+  const body = `<div class="space-y-6">
+    <section>
+      <h2 class="mb-3 text-sm font-semibold uppercase tracking-wide text-ink-faint">Profitability</h2>
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">${topMetrics}</div>
+    </section>
+    <section>
+      <h2 class="mb-3 text-sm font-semibold uppercase tracking-wide text-ink-faint">Recurring revenue & costs</h2>
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">${recurring}</div>
+    </section>
+    <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+      ${P.card(P.cardHeader("Revenue streams", `${money(f.revenue.totalCents)} total · ${pct(f.revenue.growthYoYPct)} YoY`) + `<div class="px-5 pb-5 pt-2">${revRows}</div>`)}
+      ${P.card(P.cardHeader("Expense breakdown", `${money(f.expenses.totalCents)} total`) + `<div class="px-5 pb-5 pt-2">${expRows}</div>`)}
+    </div>
+    ${P.card(P.cardHeader("Revenue trend", "Monthly revenue, last 12 months.") + `<div class="px-5 pb-5 pt-3">${P.sparkline(revTrend, "h-20 w-full", "#36a366")}</div>`)}
+    ${P.card(P.cardHeader("Monthly P&L", "Revenue, expenses, and profit by month.") + `<div class="overflow-x-auto px-1 pb-3 pt-3"><table class="w-full"><thead><tr class="border-b border-gray-100 text-xs uppercase tracking-wide text-ink-faint"><th class="px-4 py-2 text-left">Month</th><th class="px-4 py-2 text-right">Revenue</th><th class="px-4 py-2 text-right">Expenses</th><th class="px-4 py-2 text-right">Profit</th></tr></thead><tbody>${monthsRows}</tbody></table></div>`)}
+  </div>`;
+  return P.pageHeader("Financials", "Revenue, expenses, and profitability for the year.") + body;
+}
+
+// ── Taxes ──
+function taxesPage({ estimate, financials, user }) {
+  const connected = user && user.stripeConnected;
+  if (!connected) {
+    return P.pageHeader("Taxes", "Estimated taxes and ways to improve efficiency.") +
+      P.connectStripeBanner("/taxes");
+  }
+  if (!estimate) {
+    return P.pageHeader("Taxes", "Estimated taxes and ways to improve efficiency.") +
+      P.card(P.emptyState("No tax estimate yet", "We couldn't build an estimate right now. Try again shortly.", "/taxes"));
+  }
+
+  const e = estimate;
+  const sourceBadge = e.source.includes("exa")
+    ? `<span class="inline-flex items-center gap-1 rounded-full bg-brand-50 px-2 py-0.5 text-xs font-semibold text-brand-700"><i data-lucide="sparkles" class="h-3 w-3"></i>Exa + AI estimate</span>`
+    : e.source === "ai"
+    ? `<span class="inline-flex items-center gap-1 rounded-full bg-brand-50 px-2 py-0.5 text-xs font-semibold text-brand-700"><i data-lucide="sparkles" class="h-3 w-3"></i>AI estimate</span>`
+    : `<span class="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-semibold text-ink-soft">Heuristic estimate</span>`;
+
+  const topMetrics = [
+    P.metricCard({ label: "Taxable Income", value: money(e.taxableIncomeCents), sub: `FY ${e.fiscalYear}`, icon: "file-text", tone: "neutral" }),
+    P.metricCard({ label: "Estimated Tax", value: money(e.totalTaxCents), sub: e.jurisdictionLabel, icon: "landmark", tone: "watch" }),
+    P.metricCard({ label: "Effective Rate", value: `${e.effectiveRatePct}%`, sub: "Blended", icon: "percent", tone: "neutral" }),
+    P.metricCard({ label: "After-Tax Income", value: money(e.afterTaxIncomeCents), sub: "Estimated", icon: "piggy-bank", tone: "good" }),
+  ].join("");
+
+  const componentRows = (e.components || []).map((c) => `<tr class="border-b border-gray-50 last:border-0">
+    <td class="px-4 py-2.5 text-sm font-medium text-ink">${esc(c.name)}</td>
+    <td class="px-4 py-2.5 text-right text-sm text-ink-soft">${c.ratePct}%</td>
+    <td class="px-4 py-2.5 text-right text-sm font-semibold text-ink">${money(c.estTaxCents)}</td>
+  </tr>`).join("");
+
+  const tips = (e.efficiencyTips || []).map((t) => `<div class="rounded-2xl border border-gray-100 bg-white p-4 shadow-soft">
+    <div class="flex items-start justify-between gap-3">
+      <div><p class="text-sm font-semibold text-ink">${esc(t.title)}</p><p class="mt-1 text-sm text-ink-soft">${esc(t.detail)}</p></div>
+      ${t.estAnnualSavingCents > 0 ? `<span class="shrink-0 rounded-full bg-brand-50 px-2.5 py-1 text-xs font-semibold text-brand-700">~${money(t.estAnnualSavingCents)}/yr</span>` : ""}
+    </div>
+  </div>`).join("");
+
+  const itemNotes = (e.itemNotes || []).map((n) => `<li class="flex items-start gap-2 py-2"><i data-lucide="info" class="mt-0.5 h-4 w-4 shrink-0 text-ink-faint"></i><span class="text-sm text-ink-soft"><span class="font-medium text-ink">${esc(n.item)}:</span> ${esc(n.note)}</span></li>`).join("");
+
+  const sourceLinks = (e.sources || []).length
+    ? `<div class="mt-3 text-xs text-ink-faint"><span class="font-semibold">Sources:</span> ${e.sources.map((s) => `<a href="${esc(s.url)}" target="_blank" rel="noreferrer" class="underline hover:text-ink-soft">${esc(s.title || s.url)}</a>`).join(" · ")}</div>`
+    : "";
+
+  const body = `<div class="space-y-6">
+    <div class="flex items-center justify-between gap-3">
+      <p class="text-sm text-ink-soft">Estimated for <span class="font-semibold text-ink">${esc(e.jurisdictionLabel)}</span></p>
+      ${sourceBadge}
+    </div>
+
+    <div class="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3">
+      <div class="flex items-start gap-2">
+        <i data-lucide="alert-triangle" class="mt-0.5 h-4 w-4 shrink-0 text-amber-600"></i>
+        <p class="text-xs leading-relaxed text-amber-800">${esc(e.disclaimer)}</p>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">${topMetrics}</div>
+
+    ${P.card(P.cardHeader("Tax breakdown", "Estimated components for the fiscal year.") + `<div class="overflow-x-auto px-1 pb-3 pt-3"><table class="w-full"><thead><tr class="border-b border-gray-100 text-xs uppercase tracking-wide text-ink-faint"><th class="px-4 py-2 text-left">Component</th><th class="px-4 py-2 text-right">Rate</th><th class="px-4 py-2 text-right">Est. tax</th></tr></thead><tbody>${componentRows}</tbody></table></div>` + (sourceLinks ? `<div class="px-5 pb-4">${sourceLinks}</div>` : ""))}
+
+    <section>
+      <h2 class="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-ink-faint"><i data-lucide="sparkles" class="h-4 w-4"></i>Tax efficiency & recommendations</h2>
+      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">${tips}</div>
+    </section>
+
+    ${itemNotes ? P.card(P.cardHeader("How specific items are treated", "Different categories can carry different tax treatment.") + `<ul class="px-5 pb-5 pt-2">${itemNotes}</ul>`) : ""}
+  </div>`;
+  return P.pageHeader("Taxes", "Estimated taxes and ways to improve efficiency.") + body;
+}
+
 module.exports = {
   homePage, purchasesPage, savingsPage, insightsPage,
   alertsPage, todoPage, reviewPage, settingsPage,
+  financialsPage, taxesPage,
 };

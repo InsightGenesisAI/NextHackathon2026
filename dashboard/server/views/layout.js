@@ -3,6 +3,8 @@ const { esc } = require("../format");
 const NAV = [
   { href: "/", label: "Home", icon: "home" },
   { href: "/purchases", label: "Purchases", icon: "shopping-bag" },
+  { href: "/financials", label: "Financials", icon: "bar-chart-3" },
+  { href: "/taxes", label: "Taxes", icon: "landmark" },
   { href: "/savings", label: "Savings", icon: "piggy-bank" },
   { href: "/insights", label: "Insights", icon: "lightbulb" },
   { href: "/alerts", label: "Alerts", icon: "bell" },

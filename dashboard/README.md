@@ -136,6 +136,26 @@ purchases at runtime.
 > Note: the store is in-memory, so history resets on restart (and on serverless
 > cold starts). Swap `store.js` for a real database for production.
 
+## Financials & Taxes
+
+Once Stripe is connected, two more pages light up from the same demo dataset
+(`server/stripe.js`):
+
+- **Financials** (`/financials`) — revenue streams, expense breakdown, COGS,
+  gross/operating/net profit and margins, MRR/ARR/EBITDA, a 12-month revenue
+  trend, and a monthly P&L table.
+- **Taxes** (`/taxes`) — estimates annual taxes over the fiscal cycle from the
+  pre-tax profit, broken down by component with an effective rate and after-tax
+  income. It surfaces tax-efficiency tips and per-item treatment notes, with a
+  clear disclaimer that these are estimates, not advice.
+
+The tax engine (`server/taxengine.js`) uses Exa to pull current,
+location-specific rate context and OpenAI to structure the estimate and
+recommendations. Without keys it falls back to built-in heuristic rate tables
+(US/UK/Canada/Ireland/Australia/Germany/Singapore + a generic default), so the
+page always renders. Set `EXA_API_KEY` and `OPENAI_API_KEY` to enable the live
+path.
+
 ## Deploy to Vercel
 
 `vercel.json` is configured to run the Node handler as a serverless function

@@ -11,6 +11,7 @@ const http = require("http");
 const { URL } = require("url");
 
 const store = require("./store");
+const stripe = require("./stripe");
 const { mockReview, mockAgentActivity } = require("./mockData");
 const { layout } = require("./views/layout");
 const pages = require("./views/pages");
@@ -18,6 +19,7 @@ const { CLIENT_JS } = require("./clientScript");
 const auth = require("./auth");
 const authViews = require("./views/auth");
 const enrichment = require("./enrichment");
+const tax = require("./taxengine");
 
 const PORT = process.env.PORT || 3000;
 
@@ -112,6 +114,9 @@ function renderPage(pathname, user) {
     case "/review":
       return layout({ title: "Purchase Review — AgentCFO", pathname, user, extraScript: SCRIPT_TAG,
         body: pages.reviewPage({ review: mockReview, activity: mockAgentActivity }) });
+    case "/financials":
+      return layout({ title: "Financials — AgentCFO", pathname, user, extraScript: SCRIPT_TAG,
+        body: pages.financialsPage({ financials: store.getFinancialsForUser(user), user }) });
     case "/settings":
       return layout({ title: "Settings — AgentCFO", pathname, user, extraScript: SCRIPT_TAG,
         body: pages.settingsPage({ user }) });
@@ -135,6 +140,12 @@ async function handleApi(req, res, pathname) {
 
   if (pathname === "/api/v1/financial-health" && req.method === "GET")
     return sendJson(res, 200, store.hubFinancialHealth());
+
+  if (pathname === "/api/v1/financials" && req.method === "GET")
+    return sendJson(res, 200, stripe.rawDemo().financials);
+
+  if (pathname === "/api/v1/tax-profile" && req.method === "GET")
+    return sendJson(res, 200, stripe.rawDemo().taxProfile);
 
   if (pathname === "/api/v1/actions" && req.method === "GET")
     return sendJson(res, 200, store.hubActions());
@@ -180,7 +191,7 @@ function serveClientScript(res) {
   res.end(CLIENT_JS);
 }
 
-const PROTECTED_PAGES = ["/", "/purchases", "/savings", "/insights", "/alerts", "/todo", "/review", "/settings"];
+const PROTECTED_PAGES = ["/", "/purchases", "/savings", "/insights", "/alerts", "/todo", "/review", "/settings", "/financials", "/taxes"];
 
 // ── Auth + onboarding routes. Returns true if it handled the request. ──
 async function handleAuth(req, res, pathname) {
@@ -347,6 +358,17 @@ async function handler(req, res) {
       if (PROTECTED_PAGES.includes(pathname)) {
         if (!user) return redirect(res, "/login");
         if (!user.profileComplete) return redirect(res, "/onboarding");
+      }
+
+      // Taxes page runs an async estimate (Exa + AI, with heuristic fallback).
+      if (pathname === "/taxes") {
+        const financials = store.getFinancialsForUser(user);
+        const taxProfile = store.getTaxProfileForUser(user);
+        const estimate = taxProfile ? await tax.estimateTaxes(taxProfile, financials) : null;
+        return sendHtml(res, 200, layout({
+          title: "Taxes — AgentCFO", pathname, user, extraScript: SCRIPT_TAG,
+          body: pages.taxesPage({ estimate, financials, user }),
+        }));
       }
 
       const html = renderPage(pathname, user);
